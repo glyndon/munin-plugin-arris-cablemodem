@@ -23,7 +23,7 @@ import textwrap
 import subprocess
 import urllib.request
 import math
-import bs4
+# import bs4
 from bs4 import BeautifulSoup
 
 jsonFile = '/tmp/wan.json'
@@ -215,7 +215,7 @@ def reportConfig(args):
         graph_title [3] WAN Downstream Signal Strength
         graph_category x-wan
         graph_vlabel dB
-        graph_args --alt-autoscale
+        graph_args --alt-autoscale --lower-limit 0
         """))
         # graph_args --alt-autoscale-max --upper-limit 10 --lower-limit 0 --rigid
         # graph_scale no
