@@ -54,18 +54,21 @@ def main(args):
         openInput(jsonFile)
         for chan in report['downpower']:
             print('down-power-ch'+chan+'.value', report['downpower'][chan])
+        # print('down-power-spread.value', report['downpowerspread'])
         return
 
     if any('downsnr' in word for word in args):
         openInput(jsonFile)
         for chan in report['downsnr']:
             print('down-snr-ch'+chan+'.value', report['downsnr'][chan])
+        # print('down-snr-spread.value', report['downsnrspread'])
         return
 
     if any('uppower' in word for word in args):
         openInput(jsonFile)
         for chan in report['uppower']:
             print('up-power-ch'+chan+'.value', report['uppower'][chan])
+        # print('up-power-spread.value', report['uppowerspread'])
         return
 
     if any('corrected' in word for word in args):
@@ -177,13 +180,30 @@ def scrapeIntoReport(report):
     report['uncorrectable'] = {}
     report['corrected-count'] = {}
     report['uncorrectable-count'] = {}
+    downpowerHighest = 0
+    downpowerLowest = 100
+    uppowerHighest = 0
+    uppowerLowest = 100
+    downsnrHighest = 0
+    downsnrLowest = 100
     for row in block.next_siblings:
         if isinstance(row, type(block)):
             newRow = []
             for column in row:
                 newRow.append(re.sub("[^0-9.]", "", column.get_text()))
+
             report['downpower'][newRow[0]] = newRow[5]
+            if float(newRow[5]) > downpowerHighest:
+                downpowerHighest = float(newRow[5])
+            if float(newRow[5]) < downpowerLowest:
+                downpowerLowest = float(newRow[5])
+
             report['downsnr'][newRow[0]] = newRow[6]
+            if float(newRow[6]) > downsnrHighest:
+                downsnrHighest = float(newRow[6])
+            if float(newRow[6]) < downsnrLowest:
+                downsnrLowest = float(newRow[6])
+
             report['corrected-count'][newRow[0]] = newRow[7]
             report['uncorrectable-count'][newRow[0]] = newRow[8]
             if( numberOfMinutesElapsed > 1 ):
@@ -204,6 +224,14 @@ def scrapeIntoReport(report):
             for column in row:
                 newRow.append(re.sub("[^0-9.]", "", column.get_text()))
             report['uppower'][newRow[0]] = newRow[6]
+            if float(newRow[6]) > uppowerHighest:
+                uppowerHighest = float(newRow[6])
+            if float(newRow[6]) < uppowerLowest:
+                uppowerLowest = float(newRow[6])
+
+    report['uppowerspread'] = uppowerHighest - uppowerLowest + 38
+    report['downpowerspread'] = downpowerHighest - downpowerLowest
+    report['downsnrspread'] = downsnrHighest - downsnrLowest + 30
 
     return 0
 
@@ -215,8 +243,9 @@ def reportConfig(args):
         graph_title [3] WAN Downstream Signal Strength
         graph_category x-wan
         graph_vlabel dB
-        graph_args --alt-autoscale --lower-limit 0
+        graph_args --alt-autoscale
         """))
+        # down-power-spread.label Spread
         # graph_args --alt-autoscale-max --upper-limit 10 --lower-limit 0 --rigid
         # graph_scale no
         for chan in report['downpower']:
@@ -225,11 +254,12 @@ def reportConfig(args):
 
     if any('downsnr' in word for word in args):
         print(textwrap.dedent("""\
-        graph_title [4] WAN Downstream Signal SNR
+        graph_title [4] WAN Downstream SNR
         graph_category x-wan
         graph_vlabel dB
         graph_args --alt-autoscale
         """))
+        # down-snr-spread.label Spread(+30)
         # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
         # graph_scale no
         for chan in report['downsnr']:
@@ -264,11 +294,12 @@ def reportConfig(args):
 
     if any('uppower' in word for word in args):
         print(textwrap.dedent("""\
-        graph_title [5] WAN Upstream Signal
+        graph_title [5] WAN Upstream Signal Strength
         graph_category x-wan
         graph_vlabel dB
         graph_args --alt-autoscale
         """))
+        # up-power-spread.label Spread(+38)
         # graph_args --alt-autoscale --upper-limit 50 --lower-limit 30 --rigid
         for chan in report['uppower']:
             print('up-power-ch'+chan+'.label', 'ch'+chan)
