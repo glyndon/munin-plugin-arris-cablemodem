@@ -40,16 +40,17 @@ LATENCY_TEST_HOPS = 3
 report = {}
 priorReport = {}
 # list of all the names by which we might be called, or valid args supplied
-plugin_nouns = ['config', 'downpower', 'downsnr', 'uppower', 'corrected', 'uncorrectable', 'ping', 'speedtest']
+plugin_nouns = ['config', 'wan-downpower', 'wan-downsnr', 'wan-uppower', 'wan-corrected', 'wan-uncorrectable', 'wan-ping', 'wan-speedtest']
 
 
 def main(args):
     global report, priorReport, MINUTES_ELAPSED
 
-    if not any(word in plugin_nouns for word in args):
-        # (((we can't just check len(args)==1, since this file might be symlinked-to as one of those nouns)))
+    # are any of the plugin_nouns in any of the args?
+    # ((( we can't just check len(args)==1, since args[0] might be one of those nouns )))
+    if not any(noun in arg for arg in args for noun in plugin_nouns):
         # ============================================================
-        # This is the default logic that happens when called to update stored data.
+        # This is the default logic that happens when called by no plugin-noun's name.
         # Instead of reporting we scrape the modem, do some math, and store the JSON
 
         reportDateTime()  # get current time into the dictionary
@@ -82,13 +83,14 @@ def main(args):
             nextHopLatency()  # measured by ping
         json.dump(report, fhOutput, indent=2)
         fhOutput.close()
+        return 0
 
     # If there's a 'config' param, then just emit the relevant static config report
     elif 'config' in args:
         reportConfig(args)
         return 0
 
-    elif 'speedtest' in args:
+    elif any('wan-speedtest' in word for word in args):
         openInput(SPEEDTEST_JSON_FILE)
         downloadspeed = float(report['download'] / 1000000)
         uploadspeed = float(report['upload'] / 1000000)
@@ -102,22 +104,22 @@ def main(args):
     openInput(JSON_FILE) # everything past here needs report[] filled-in
     # report data as a plugin for the name by which we were called
 
-    if 'downpower' in args:
+    if any('wan-downpower' in word for word in args):
         for chan in report['downpower']:
             print('down-power-ch' + chan + '.value', report['downpower'][chan])
         # print('down-power-spread.value', report['downpowerspread'])
 
-    elif 'downsnr' in args:
+    elif any('wan-downsnr' in word for word in args):
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.value', report['downsnr'][chan])
         # print('down-snr-spread.value', report['downsnrspread'])
 
-    elif 'uppower' in args:
+    elif any('wan-uppower' in word for word in args):
         for chan in report['uppower']:
             print('up-power-ch' + chan + '.value', report['uppower'][chan])
         # print('up-power-spread.value', report['uppowerspread'])
 
-    elif 'corrected' in args:
+    elif any('wan-corrected' in word for word in args):
         try:
             for chan in report['corrected']:
                 print('down-corrected-ch' + chan + '.value',
@@ -125,7 +127,7 @@ def main(args):
         except KeyError:  # silently tolerate this section being absent
             pass
 
-    elif 'uncorrectable' in args:
+    elif any('wan-uncorrectable' in word for word in args):
         try:
             for chan in report['uncorrectable']:
                 print('down-uncorrectable-ch' + chan + '.value',
@@ -133,7 +135,7 @@ def main(args):
         except KeyError:  # silently tolerate this section being absent
             pass
 
-    elif 'ping' in args:
+    elif any('wan-ping' in word for word in args):
         print('latency.value', report['next_hop_latency'])
 
     return 0
@@ -147,8 +149,6 @@ def scrapeIntoReport():
         page = requests.get(MODEM_UPTIME_URL, timeout=10).text
     except requests.exceptions.RequestException:
         return 1
-    # page = urllib.request.urlopen(MODEM_UPTIME_URL, timeout=2).read()
-    # page = page.decode("utf-8")  # convert bytes to str
     page = page.replace('\x0D', '')  # strip unwanted newlines
     soup = BeautifulSoup(str(page),
                          'html.parser')  # this call takes a lot of time
@@ -169,8 +169,6 @@ def scrapeIntoReport():
         page = requests.get(MODEM_STATUS_URL, timeout=10).text
     except requests.exceptions.RequestException:
         return 1
-    # page = urllib.request.urlopen(MODEM_STATUS_URL, timeout=2).read()
-    # page = page.decode("utf-8")  # convert bytes to str
     page = page.replace('\x0D', '')  # strip unwanted newlines
     soup = BeautifulSoup(str(page),
                          'html.parser')  # this call takes a lot of time
@@ -204,27 +202,11 @@ def scrapeIntoReport():
 
             report['corrected-total'][newRow[0]] = newRow[7]
             report['uncorrectable-total'][newRow[0]] = newRow[8]
-            if MINUTES_ELAPSED > 1:
-                # report['corrected'][newRow[0]] = str(
-                #     (float(newRow[7]) -
-                #      float(priorReport['corrected-total'][newRow[0]])) /
-                #     MINUTES_ELAPSED)
-                # if float(
-                #         report['corrected'][newRow[0]]
-                # ) < 0:  # in case the modem was restarted, counts got reset
-                #     report['corrected'][newRow[0]] = '0'
+            if MINUTES_ELAPSED > 1 and 'corrected-total' in priorReport:
                 # TODO: code fails here if run after modem's returned from offline state
                 perMinute = (float(newRow[7]) - float(priorReport['corrected-total'][newRow[0]])) / MINUTES_ELAPSED
                 report['corrected'][newRow[0]] = str(max(perMinute, 0))
-            if MINUTES_ELAPSED > 1:
-                # report['uncorrectable'][newRow[0]] = str(
-                #     (float(newRow[8]) -
-                #      float(priorReport['uncorrectable-total'][newRow[0]])) /
-                #     MINUTES_ELAPSED)
-                # if float(
-                #         report['uncorrectable'][newRow[0]]
-                # ) < 0:  # in case the modem was restarted, counts got reset
-                #     report['uncorrectable'][newRow[0]] = '0'
+            if MINUTES_ELAPSED > 1 and 'uncorrectable-total' in priorReport:
                 perMinute = (float(newRow[8]) - float(priorReport['uncorrectable-total'][newRow[0]])) / MINUTES_ELAPSED
                 report['uncorrectable'][newRow[0]] = str(max(perMinute, 0))
 
@@ -237,22 +219,10 @@ def scrapeIntoReport():
             for column in row:
                 newRow.append(re.sub("[^0-9.]", "", column.get_text()))
             report['uppower'][newRow[0]] = newRow[6]
-            # if float(newRow[6]) > up_power_highest:
-            #     up_power_highest = float(newRow[6])
-            # if float(newRow[6]) < up_power_lowest:
-            #     up_power_lowest = float(newRow[6])
 
-    # report['uppowerspread'] = up_power_highest - up_power_lowest
-    # report['downpowerspread'] = down_power_highest - down_power_lowest
-    # report['downsnrspread'] = down_snr_highest - down_snr_lowest
-    # float(i) for i in lst
     report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) - min(float(i) for i in report['uppower'].values())
     report['downpowerspread'] = max(float(i) for i in report['downpower'].values()) - min(float(i) for i in report['downpower'].values())
     report['downsnrspread'] = max(float(i) for i in report['downsnr'].values()) - min(float(i) for i in report['downsnr'].values())
-    # print(report['downpower'].values())
-    # print(list(float(i) for i in report['uppower'].values()))
-    # print(max(float(i) for i in report['downpower'].values()))
-    # print(min(float(i) for i in report['downpower'].values()))
 
     return 0
 
