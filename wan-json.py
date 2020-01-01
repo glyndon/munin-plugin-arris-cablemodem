@@ -23,11 +23,10 @@ import math
 import re
 import subprocess
 import textwrap
-# import urllib.request
 import requests
 from bs4 import BeautifulSoup
 
-JSON_FILE = '/tmp/wan.json'
+SIGNAL_JSON_FILE = '/tmp/wan.json'
 SPEEDTEST_JSON_FILE = '/tmp/speedtest.json'
 MINUTES_ELAPSED = 0.0
 MODEM_STATUS_URL = 'http://192.168.100.1/'
@@ -40,7 +39,8 @@ LATENCY_TEST_HOPS = 3
 report = {}
 priorReport = {}
 # list of all the names by which we might be called, or valid args supplied
-plugin_nouns = ['config', 'wan-downpower', 'wan-downsnr', 'wan-uppower', 'wan-corrected', 'wan-uncorrectable', 'wan-ping', 'wan-speedtest']
+plugin_nouns = ['config', 'wan-downpower', 'wan-downsnr', 'wan-uppower',
+                'wan-corrected', 'wan-uncorrectable', 'wan-ping', 'wan-speedtest']
 
 
 def main(args):
@@ -55,7 +55,7 @@ def main(args):
 
         reportDateTime()  # get current time into the dictionary
         try:  # fetch last-run's data and datetime
-            fhInput = open(JSON_FILE, 'r')
+            fhInput = open(SIGNAL_JSON_FILE, 'r')
             priorReport = json.load(fhInput)
             fhInput.close()
 
@@ -71,21 +71,23 @@ def main(args):
 
         report['minutes_since_last_run'] = str(MINUTES_ELAPSED)
         try:  # get all the status data from the modem
-            fhOutput = open(JSON_FILE, 'w')
+            fhOutput = open(SIGNAL_JSON_FILE, 'w')
         except OSError:
-            print("something went wrong creating", JSON_FILE)
+            print("something went wrong creating",SIGNAL_JSON_FILE)
             return -1
+
         if scrapeIntoReport() != 0:
             print("No Internet Connection as of (local time):")
             print(datetime.datetime.now().isoformat())
         else:
+            getUptimeIntoReport() # not currently used anywhere
             getGateway()  # determined by traceroute
-            nextHopLatency()  # measured by ping
+            getNextHopLatency()  # measured by ping
         json.dump(report, fhOutput, indent=2)
         fhOutput.close()
         return 0
 
-    # If there's a 'config' param, then just emit the relevant static config report
+    # If there's a 'config' param, then just emit the relevant static config report, and end
     elif 'config' in args:
         reportConfig(args)
         return 0
@@ -101,7 +103,7 @@ def main(args):
         print('distance.value', distance)
         return 0
 
-    openInput(JSON_FILE) # everything past here needs report[] filled-in
+    openInput(SIGNAL_JSON_FILE) # everything past here needs report[] filled-in
     # report data as a plugin for the name by which we were called
 
     if any('wan-downpower' in word for word in args):
@@ -144,26 +146,6 @@ def main(args):
 def scrapeIntoReport():
     global report, priorReport, MINUTES_ELAPSED
 
-    # Get the 'Up Time' quantity (even though we don't use it anywhere...)
-    try:
-        page = requests.get(MODEM_UPTIME_URL, timeout=10).text
-    except requests.exceptions.RequestException:
-        return 1
-    page = page.replace('\x0D', '')  # strip unwanted newlines
-    soup = BeautifulSoup(str(page),
-                         'html.parser')  # this call takes a lot of time
-
-    block = soup.find('td', string="Up Time")
-    block = block.next_sibling  # skip the header rows
-    block = block.next_sibling
-    uptimeText = block.get_text()
-    uptimeElements = re.findall(r"\d+", uptimeText)
-    uptime_seconds = int(uptimeElements[3]) \
-                   + int(uptimeElements[2]) * 60 \
-                   + int(uptimeElements[1]) * 3600 \
-                   + int(uptimeElements[0]) * 86400
-    report['uptime_seconds'] = str(uptime_seconds)
-
     # Get the main page with its various stats
     try:
         page = requests.get(MODEM_STATUS_URL, timeout=10).text
@@ -203,11 +185,14 @@ def scrapeIntoReport():
             report['corrected-total'][newRow[0]] = newRow[7]
             report['uncorrectable-total'][newRow[0]] = newRow[8]
             if MINUTES_ELAPSED > 1 and 'corrected-total' in priorReport:
-                # TODO: code fails here if run after modem's returned from offline state
-                perMinute = (float(newRow[7]) - float(priorReport['corrected-total'][newRow[0]])) / MINUTES_ELAPSED
+                perMinute = (float(newRow[7]) \
+                            - float(priorReport['corrected-total'][newRow[0]])) \
+                            / MINUTES_ELAPSED
                 report['corrected'][newRow[0]] = str(max(perMinute, 0))
             if MINUTES_ELAPSED > 1 and 'uncorrectable-total' in priorReport:
-                perMinute = (float(newRow[8]) - float(priorReport['uncorrectable-total'][newRow[0]])) / MINUTES_ELAPSED
+                perMinute = (float(newRow[8]) \
+                            - float(priorReport['uncorrectable-total'][newRow[0]])) \
+                            / MINUTES_ELAPSED
                 report['uncorrectable'][newRow[0]] = str(max(perMinute, 0))
 
     block = soup.find('th', string="Upstream Bonded Channels").parent
@@ -220,15 +205,41 @@ def scrapeIntoReport():
                 newRow.append(re.sub("[^0-9.]", "", column.get_text()))
             report['uppower'][newRow[0]] = newRow[6]
 
-    report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) - min(float(i) for i in report['uppower'].values())
-    report['downpowerspread'] = max(float(i) for i in report['downpower'].values()) - min(float(i) for i in report['downpower'].values())
-    report['downsnrspread'] = max(float(i) for i in report['downsnr'].values()) - min(float(i) for i in report['downsnr'].values())
+    report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) \
+                                - min(float(i) for i in report['uppower'].values())
+    report['downpowerspread'] = max(float(i) for i in report['downpower'].values()) \
+                                - min(float(i) for i in report['downpower'].values())
+    report['downsnrspread'] = max(float(i) for i in report['downsnr'].values()) \
+                                - min(float(i) for i in report['downsnr'].values())
 
     return 0
 
+def getUptimeIntoReport():
+    global report, priorReport, MINUTES_ELAPSED
+
+    # Get the 'Up Time' quantity (even though we don't use it anywhere...)
+    try:
+        page = requests.get(MODEM_UPTIME_URL, timeout=10).text
+    except requests.exceptions.RequestException:
+        return 1
+    page = page.replace('\x0D', '')  # strip unwanted newlines
+    soup = BeautifulSoup(str(page),
+                         'html.parser')  # this call takes a lot of time
+
+    block = soup.find('td', string="Up Time")
+    block = block.next_sibling  # skip the header rows
+    block = block.next_sibling
+    uptimeText = block.get_text()
+    uptimeElements = re.findall(r"\d+", uptimeText)
+    uptime_seconds = int(uptimeElements[3]) \
+                   + int(uptimeElements[2]) * 60 \
+                   + int(uptimeElements[1]) * 3600 \
+                   + int(uptimeElements[0]) * 86400
+    report['uptime_seconds'] = str(uptime_seconds)
+
 
 def reportConfig(args):
-    openInput(JSON_FILE)
+    openInput(SIGNAL_JSON_FILE)
 
     if any('downpower' in word for word in args):
         print(
@@ -349,7 +360,7 @@ def getGateway():  #returns success by setting report['gateway']
     report['gateway'] = str(result)
 
 
-def nextHopLatency():
+def getNextHopLatency():
     global report, priorReport
     cmd = "/bin/ping -W 3 -nqc 3 " + report['gateway'] + " 2>/dev/null"
     try:
