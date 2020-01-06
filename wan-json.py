@@ -39,8 +39,8 @@ LATENCY_TEST_HOPS = 3
 report = {}
 priorReport = {}
 # list of all the names by which we might be called, or valid args supplied
-plugin_nouns = ['config', 'wan-downpower', 'wan-downsnr', 'wan-uppower',
-                'wan-corrected', 'wan-uncorrectable', 'wan-ping', 'wan-speedtest']
+plugin_nouns = ['config', 'wan-downpower', 'wan-downsnr', 'wan-uppower', 'wan-uptime',
+                'wan-corrected', 'wan-uncorrectable', 'wan-ping', 'wan-speedtest', 'wan-spread']
 
 
 def main(args):
@@ -54,6 +54,8 @@ def main(args):
         # Instead of reporting we scrape the modem, do some math, and store the JSON
 
         reportDateTime()  # get current time into the dictionary
+        if getUptimeIntoReport():  # also a handy check to see if the modem is responding
+            return 1
         try:  # fetch last-run's data and datetime
             fhInput = open(SIGNAL_JSON_FILE, 'r')
             priorReport = json.load(fhInput)
@@ -70,19 +72,17 @@ def main(args):
             MINUTES_ELAPSED = 0
 
         report['minutes_since_last_run'] = str(MINUTES_ELAPSED)
+
+        if getStatusIntoReport():
+            return 1
+        getGateway()  # determined by traceroute
+        getNextHopLatency()  # measured by ping
         try:  # get all the status data from the modem
             fhOutput = open(SIGNAL_JSON_FILE, 'w')
         except OSError:
-            print("something went wrong creating",SIGNAL_JSON_FILE)
-            return -1
-
-        if scrapeIntoReport() != 0:
-            print("No Internet Connection as of (local time):")
-            print(datetime.datetime.now().isoformat())
-        else:
-            getUptimeIntoReport() # not currently used anywhere
-            getGateway()  # determined by traceroute
-            getNextHopLatency()  # measured by ping
+            print("something went wrong creating",
+                  SIGNAL_JSON_FILE, file=sys.stderr)
+            return 1
         json.dump(report, fhOutput, indent=2)
         fhOutput.close()
         return 0
@@ -93,6 +93,7 @@ def main(args):
         return 0
 
     elif any('wan-speedtest' in word for word in args):
+        # speedtest's JSON file is generated elsewhere, we just report it to Munin
         openInput(SPEEDTEST_JSON_FILE)
         downloadspeed = float(report['download'] / 1000000)
         uploadspeed = float(report['upload'] / 1000000)
@@ -103,7 +104,8 @@ def main(args):
         print('distance.value', distance)
         return 0
 
-    openInput(SIGNAL_JSON_FILE) # everything past here needs report[] filled-in
+    # everything past here needs report[] filled-in
+    openInput(SIGNAL_JSON_FILE)
     # report data as a plugin for the name by which we were called
 
     if any('wan-downpower' in word for word in args):
@@ -140,16 +142,27 @@ def main(args):
     elif any('wan-ping' in word for word in args):
         print('latency.value', report['next_hop_latency'])
 
+    elif any('wan-uptime' in word for word in args):
+        # report as days, so divide seconds ...
+        print('uptime.value', float(report['uptime_seconds']) / 86400.0)
+
+    elif any('wan-spread' in word for word in args):
+        # report as days, so divide seconds ...
+        print('downpowerspread.value', report['downpowerspread'])
+        print('downsnrspread.value', report['downsnrspread'])
+        print('uppowerspread.value', report['uppowerspread'])
+
     return 0
 
 
-def scrapeIntoReport():
+def getStatusIntoReport():
     global report, priorReport, MINUTES_ELAPSED
 
     # Get the main page with its various stats
     try:
-        page = requests.get(MODEM_STATUS_URL, timeout=10).text
+        page = requests.get(MODEM_STATUS_URL, timeout=25).text
     except requests.exceptions.RequestException:
+        print("modem status page not responding", file=sys.stderr)
         return 1
     page = page.replace('\x0D', '')  # strip unwanted newlines
     soup = BeautifulSoup(str(page),
@@ -159,11 +172,13 @@ def scrapeIntoReport():
     internetStatus = soup.find(
         'td', string="DOCSIS Network Access Enabled").next_sibling.get_text()
     if 'Allowed' not in internetStatus:
+        print("Modem indicates no Internet Connection as of (local time):",
+              datetime.datetime.now().isoformat(), file=sys.stderr)
         return 1
 
     # Gather the various data items from the tables...
     block = soup.find('th', string="Downstream Bonded Channels").parent
-    block = block.next_sibling  # skip the header rows
+    block = block.next_sibling  # skip the 2 header rows
     block = block.next_sibling
     report['downsnr'] = {}
     report['downpower'] = {}
@@ -176,7 +191,7 @@ def scrapeIntoReport():
     for row in block.next_siblings:
         if isinstance(row, type(block)):
             newRow = []
-            for column in row: # grab all the row's numbers into a list
+            for column in row:  # grab all the row's numbers into a list
                 newRow.append(re.sub("[^0-9.]", "", column.get_text()))
 
             report['downpower'][newRow[0]] = newRow[5]
@@ -185,14 +200,14 @@ def scrapeIntoReport():
             report['corrected-total'][newRow[0]] = newRow[7]
             report['uncorrectable-total'][newRow[0]] = newRow[8]
             if MINUTES_ELAPSED > 1 and 'corrected-total' in priorReport:
-                perMinute = (float(newRow[7]) \
-                            - float(priorReport['corrected-total'][newRow[0]])) \
-                            / MINUTES_ELAPSED
+                perMinute = (float(newRow[7])
+                             - float(priorReport['corrected-total'][newRow[0]])) \
+                    / MINUTES_ELAPSED
                 report['corrected'][newRow[0]] = str(max(perMinute, 0))
             if MINUTES_ELAPSED > 1 and 'uncorrectable-total' in priorReport:
-                perMinute = (float(newRow[8]) \
-                            - float(priorReport['uncorrectable-total'][newRow[0]])) \
-                            / MINUTES_ELAPSED
+                perMinute = (float(newRow[8])
+                             - float(priorReport['uncorrectable-total'][newRow[0]])) \
+                    / MINUTES_ELAPSED
                 report['uncorrectable'][newRow[0]] = str(max(perMinute, 0))
 
     block = soup.find('th', string="Upstream Bonded Channels").parent
@@ -206,21 +221,23 @@ def scrapeIntoReport():
             report['uppower'][newRow[0]] = newRow[6]
 
     report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) \
-                                - min(float(i) for i in report['uppower'].values())
+        - min(float(i) for i in report['uppower'].values())
     report['downpowerspread'] = max(float(i) for i in report['downpower'].values()) \
-                                - min(float(i) for i in report['downpower'].values())
+        - min(float(i) for i in report['downpower'].values())
     report['downsnrspread'] = max(float(i) for i in report['downsnr'].values()) \
-                                - min(float(i) for i in report['downsnr'].values())
+        - min(float(i) for i in report['downsnr'].values())
 
     return 0
+
 
 def getUptimeIntoReport():
     global report, priorReport, MINUTES_ELAPSED
 
-    # Get the 'Up Time' quantity (even though we don't use it anywhere...)
+    # Get the 'Up Time' quantity
     try:
-        page = requests.get(MODEM_UPTIME_URL, timeout=10).text
+        page = requests.get(MODEM_UPTIME_URL, timeout=25).text
     except requests.exceptions.RequestException:
+        print("modem uptime page not responding", file=sys.stderr)
         return 1
     page = page.replace('\x0D', '')  # strip unwanted newlines
     soup = BeautifulSoup(str(page),
@@ -232,16 +249,17 @@ def getUptimeIntoReport():
     uptimeText = block.get_text()
     uptimeElements = re.findall(r"\d+", uptimeText)
     uptime_seconds = int(uptimeElements[3]) \
-                   + int(uptimeElements[2]) * 60 \
-                   + int(uptimeElements[1]) * 3600 \
-                   + int(uptimeElements[0]) * 86400
+        + int(uptimeElements[2]) * 60 \
+        + int(uptimeElements[1]) * 3600 \
+        + int(uptimeElements[0]) * 86400
     report['uptime_seconds'] = str(uptime_seconds)
+    return 0
 
 
 def reportConfig(args):
     openInput(SIGNAL_JSON_FILE)
 
-    if any('downpower' in word for word in args):
+    if any('wan-downpower' in word for word in args):
         print(
             textwrap.dedent("""\
         graph_title [3] WAN Downstream Power
@@ -255,7 +273,7 @@ def reportConfig(args):
         for chan in report['downpower']:
             print('down-power-ch' + chan + '.label', 'ch' + chan)
 
-    elif any('downsnr' in word for word in args):
+    elif any('wan-downsnr' in word for word in args):
         print(
             textwrap.dedent("""\
         graph_title [4] WAN Downstream SNR
@@ -269,11 +287,12 @@ def reportConfig(args):
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.label', 'ch' + chan)
 
-    elif any('corrected' in word for word in args):
+    elif any('wan-corrected' in word for word in args):
         print(
             textwrap.dedent("""\
-        graph_title [6] WAN Downstream Corrected
+        graph_title [7] WAN Downstream Corrected
         graph_category x-wan
+        graph_scale no
         graph_vlabel Blocks per Minute
         graph_args --alt-autoscale
         """))
@@ -282,11 +301,12 @@ def reportConfig(args):
         for chan in report['corrected']:
             print('down-corrected-ch' + chan + '.label', 'ch' + chan)
 
-    elif any('uncorrectable' in word for word in args):
+    elif any('wan-uncorrectable' in word for word in args):
         print(
             textwrap.dedent("""\
-        graph_title [7] WAN Downstream Uncorrectable
+        graph_title [8] WAN Downstream Uncorrectable
         graph_category x-wan
+        graph_scale no
         graph_vlabel Blocks per Minute
         graph_args --alt-autoscale
         """))
@@ -295,7 +315,7 @@ def reportConfig(args):
         for chan in report['uncorrectable']:
             print('down-uncorrectable-ch' + chan + '.label', 'ch' + chan)
 
-    elif any('uppower' in word for word in args):
+    elif any('wan-uppower' in word for word in args):
         print(
             textwrap.dedent("""\
         graph_title [5] WAN Upstream Power
@@ -308,7 +328,7 @@ def reportConfig(args):
         for chan in report['uppower']:
             print('up-power-ch' + chan + '.label', 'ch' + chan)
 
-    elif any('ping' in word for word in args):
+    elif any('wan-ping' in word for word in args):
         print(
             textwrap.dedent("""\
         graph_title [2] WAN Next-Hop latency
@@ -319,7 +339,7 @@ def reportConfig(args):
         latency.colour cc2900
         """))
 
-    elif any('speedtest' in word for word in args):
+    elif any('wan-speedtest' in word for word in args):
         print(
             textwrap.dedent("""\
         graph_category x-wan
@@ -342,8 +362,34 @@ def reportConfig(args):
         graph_info Graph of Internet Connection Speed
         """))
 
+    elif any('wan-uptime' in word for word in args):
+        print(
+            textwrap.dedent("""\
+        graph_title [9] Modem Uptime
+        graph_args --base 1000 --lower-limit 0
+        graph_scale no
+        graph_vlabel uptime in days
+        graph_category x-wan
+        uptime.label uptime
+        uptime.draw AREA
+        """))
 
-def getGateway():  #returns success by setting report['gateway']
+    elif any('wan-spread' in word for word in args):
+        print(
+            textwrap.dedent("""\
+        graph_title [6] Signal Quality Spread
+        graph_args --alt-autoscale
+        graph_scale no
+        graph_vlabel dB
+        graph_category x-wan
+        downpowerspread.label Downstream Power spread
+        downsnrspread.label Downstream SNR spread
+        uppowerspread.label Upstream Power spread
+        """))
+        #  --lower-limit 0 --rigid
+
+
+def getGateway():  # returns success by setting report['gateway']
     global report, priorReport
     cmd = LATENCY_TEST_CMD \
         + str(LATENCY_TEST_HOPS) \
@@ -405,10 +451,15 @@ def openInput(aFile):
         report = json.load(fhInput)
         fhInput.close()
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
-        print("error opening", aFile, "for read:", the_error, file=sys.stderr)
-        sys.exit()
+        print("error reading", aFile, the_error, file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == '__main__':
     import sys
-    sys.exit(main(sys.argv))
+    try:
+        main_result = main(sys.argv)
+    except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
+        print("error in main():", the_error, file=sys.stderr)
+        sys.exit(1)
+    sys.exit(main_result)
