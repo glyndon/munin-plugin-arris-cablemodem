@@ -166,7 +166,8 @@ def getStatusIntoReport():
         return 1
     page = page.replace('\x0D', '')  # strip unwanted newlines
     soup = BeautifulSoup(str(page),
-                         'html.parser')  # this call takes a lot of time
+                        'html5lib')
+                        #  'html.parser')  # this call takes a lot of time
 
     # Before parsing all the numbers, be sure WAN is connected, else do not report
     internetStatus = soup.find(
@@ -192,7 +193,8 @@ def getStatusIntoReport():
         if isinstance(row, type(block)):
             newRow = []
             for column in row:  # grab all the row's numbers into a list
-                newRow.append(re.sub("[^0-9.]", "", column.get_text()))
+                if isinstance(column, type(block)):
+                    newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
 
             report['downpower'][newRow[0]] = newRow[5]
             report['downsnr'][newRow[0]] = newRow[6]
@@ -200,14 +202,20 @@ def getStatusIntoReport():
             report['corrected-total'][newRow[0]] = newRow[7]
             report['uncorrectable-total'][newRow[0]] = newRow[8]
             if MINUTES_ELAPSED > 1 and 'corrected-total' in priorReport:
-                perMinute = (float(newRow[7])
+                try:
+                    perMinute = (float(newRow[7])
                              - float(priorReport['corrected-total'][newRow[0]])) \
-                    / MINUTES_ELAPSED
+                            / MINUTES_ELAPSED
+                except KeyError:  # silently tolerate this section being absent
+                    perMinute = 0
                 report['corrected'][newRow[0]] = str(max(perMinute, 0))
             if MINUTES_ELAPSED > 1 and 'uncorrectable-total' in priorReport:
-                perMinute = (float(newRow[8])
+                try:
+                    perMinute = (float(newRow[8])
                              - float(priorReport['uncorrectable-total'][newRow[0]])) \
-                    / MINUTES_ELAPSED
+                            / MINUTES_ELAPSED
+                except KeyError:  # silently tolerate this section being absent
+                    perMinute = 0
                 report['uncorrectable'][newRow[0]] = str(max(perMinute, 0))
 
     block = soup.find('th', string="Upstream Bonded Channels").parent
@@ -217,7 +225,8 @@ def getStatusIntoReport():
         if isinstance(row, type(block)):
             newRow = []
             for column in row:
-                newRow.append(re.sub("[^0-9.]", "", column.get_text()))
+                if isinstance(column, type(block)):
+                    newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
             report['uppower'][newRow[0]] = newRow[6]
 
     report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) \
