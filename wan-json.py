@@ -7,7 +7,7 @@
     Operates in 3 modes: gather data, report as plugin, report config as plugin
     1) When called by its own name (i.e. by cron), it scrapes data
        from the Arris Cablemodem's status pages and stores the relevant values as a JSON file.
-    2) When called by (arg[0]) the name of a plugin it emulates it reads the JSON file
+    2) When called by (args[0]) the name of a plugin it emulates it reads the JSON file
        and reports the requested values.
     3) If 'config' is an arg, reports that plugin's config text.
 
@@ -32,10 +32,9 @@ MINUTES_ELAPSED = 0.0
 MODEM_STATUS_URL = 'http://192.168.100.1/'
 MODEM_UPTIME_URL = 'http://192.168.100.1/RgSwInfo.asp'
 LATENCY_TEST_CMD = (
-    "/usr/sbin/traceroute "
-    "-n --sendwait=0.5 --sim-queries=1 --wait=1 --queries=1 --max-hops=")
-LATENCY_TEST_HOST = '8.8.4.4'
+    "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops=")
 LATENCY_TEST_HOPS = 3
+LATENCY_TEST_HOST = '8.8.4.4'
 report = {}
 priorReport = {}
 # list of all the names by which we might be called, or valid args supplied
@@ -75,7 +74,6 @@ def main(args):
 
         if getStatusIntoReport():
             return 1
-        getGateway()  # determined by traceroute
         getNextHopLatency()  # measured by ping
         try:  # get all the status data from the modem
             fhOutput = open(SIGNAL_JSON_FILE, 'w')
@@ -88,11 +86,11 @@ def main(args):
         return 0
 
     # If there's a 'config' param, then just emit the relevant static config report, and end
-    elif 'config' in args:
+    if 'config' in args:
         reportConfig(args)
         return 0
 
-    elif any('wan-speedtest' in word for word in args):
+    if any('wan-speedtest' in word for word in args):
         # speedtest's JSON file is generated elsewhere, we just report it to Munin
         openInput(SPEEDTEST_JSON_FILE)
         downloadspeed = float(report['download'] / 1000000)
@@ -147,7 +145,6 @@ def main(args):
         print('uptime.value', float(report['uptime_seconds']) / 86400.0)
 
     elif any('wan-spread' in word for word in args):
-        # report as days, so divide seconds ...
         print('downpowerspread.value', report['downpowerspread'])
         print('downsnrspread.value', report['downsnrspread'])
         print('uppowerspread.value', report['uppowerspread'])
@@ -184,8 +181,8 @@ def getStatusIntoReport():
     report['uppower'] = {}
     report['corrected'] = {}
     report['uncorrectable'] = {}
-    report['corrected-total'] = {}
-    report['uncorrectable-total'] = {}
+    report['corrected_total'] = {}
+    report['uncorrectable_total'] = {}
 
     for row in block.next_siblings:
         if isinstance(row, type(block)):
@@ -197,21 +194,21 @@ def getStatusIntoReport():
             report['downpower'][newRow[0]] = newRow[5]
             report['downsnr'][newRow[0]] = newRow[6]
 
-            report['corrected-total'][newRow[0]] = newRow[7]
-            report['uncorrectable-total'][newRow[0]] = newRow[8]
-            if MINUTES_ELAPSED > 1 and 'corrected-total' in priorReport:
+            report['corrected_total'][newRow[0]] = newRow[7]
+            report['uncorrectable_total'][newRow[0]] = newRow[8]
+            if MINUTES_ELAPSED > 1 and 'corrected_total' in priorReport:
                 try:
                     perMinute = (float(newRow[7])
-                             - float(priorReport['corrected-total'][newRow[0]])) \
-                            / MINUTES_ELAPSED
+                                 - float(priorReport['corrected_total'][newRow[0]])) \
+                                 / MINUTES_ELAPSED
                 except KeyError:  # silently tolerate this section being absent
                     perMinute = 0
                 report['corrected'][newRow[0]] = str(max(perMinute, 0))
-            if MINUTES_ELAPSED > 1 and 'uncorrectable-total' in priorReport:
+            if MINUTES_ELAPSED > 1 and 'uncorrectable_total' in priorReport:
                 try:
                     perMinute = (float(newRow[8])
-                             - float(priorReport['uncorrectable-total'][newRow[0]])) \
-                            / MINUTES_ELAPSED
+                                 - float(priorReport['uncorrectable_total'][newRow[0]])) \
+                                 / MINUTES_ELAPSED
                 except KeyError:  # silently tolerate this section being absent
                     perMinute = 0
                 report['uncorrectable'][newRow[0]] = str(max(perMinute, 0))
@@ -414,27 +411,27 @@ def getGateway():  # returns success by setting report['gateway']
 
 def getNextHopLatency():
     global report, priorReport
+    getGateway()
     cmd = "/bin/ping -W 3 -nqc 3 " + report['gateway'] + " 2>/dev/null"
     try:
         output = subprocess.check_output(cmd, shell=True).decode("utf-8")
     except subprocess.CalledProcessError:
         report['next_hop_latency'] = 'NaN'
-        return 'NaN'
+        return
     result = '0'
     for line in output.split('\n'):
         if line.startswith('rtt'):
-            result = line.split('/')
-            if len(result) > 4:
-                result = result[4]
+            fields = line.split('/')
+            if len(fields) > 4:
+                result = fields[4]
             break
-    report['next_hop_latency'] = str(result)
 
     try:  # clip this value at 100 to spare graph messes when something's wrong
         if float(result) > 100.0:
             result = str(100.0)
     except ValueError:
         result = '0'
-    return result
+    report['next_hop_latency'] = str(result)
 
 
 def reportDateTime():
