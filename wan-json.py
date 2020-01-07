@@ -165,9 +165,7 @@ def getStatusIntoReport():
         print("modem status page not responding", file=sys.stderr)
         return 1
     page = page.replace('\x0D', '')  # strip unwanted newlines
-    soup = BeautifulSoup(str(page),
-                        'html5lib')
-                        #  'html.parser')  # this call takes a lot of time
+    soup = BeautifulSoup(str(page), 'html5lib')
 
     # Before parsing all the numbers, be sure WAN is connected, else do not report
     internetStatus = soup.find(
@@ -249,8 +247,7 @@ def getUptimeIntoReport():
         print("modem uptime page not responding", file=sys.stderr)
         return 1
     page = page.replace('\x0D', '')  # strip unwanted newlines
-    soup = BeautifulSoup(str(page),
-                         'html.parser')  # this call takes a lot of time
+    soup = BeautifulSoup(str(page), 'html5lib')  # this call takes a long time
 
     block = soup.find('td', string="Up Time")
     block = block.next_sibling  # skip the header rows
