@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 #!/usr/bin/python3
-    Copyright 2017-2019 Gary Dobbins <gary@dobbinsonline.org>
+    Copyright 2017-2020 Gary Dobbins <gary@dobbinsonline.org>
 
     A Munin plugin that acts like several plugins (each is a uniquely-named link to this file)
     Operates in 3 modes: gather data, report as plugin, report config as plugin
@@ -54,8 +54,10 @@ LATENCY_TEST_HOST = '8.8.4.4'
 report = {}
 priorReport = {}
 # list of all the names by which we might be called, or valid args supplied
-plugin_nouns = ['config', 'wan-downpower', 'wan-downsnr', 'wan-uppower', 'wan-uptime',
-                'wan-corrected', 'wan-uncorrectable', 'wan-ping', 'wan-speedtest', 'wan-spread']
+plugin_nouns = ['config', 'wan-downpower', 'wan-downsnr', 'wan-uppower', 'wan-uptime', 
+                'wan-error-corr', 'wan-error-uncorr',
+                # 'wan-corrected', 'wan-uncorrectable',
+                'wan-ping', 'wan-speedtest', 'wan-spread']
 
 
 def main(args):
@@ -137,21 +139,29 @@ def main(args):
             print('up-power-ch' + chan + '.value', report['uppower'][chan])
         # print('up-power-spread.value', report['uppowerspread'])
 
-    elif any('wan-corrected' in word for word in args):
-        try:
-            for chan in report['corrected']:
-                print('down-corrected-ch' + chan + '.value',
-                      report['corrected'][chan])
-        except KeyError:  # silently tolerate this section being absent
-            pass
+    elif any('wan-error-corr' in word for word in args):
+        for chan in report['corrected_total']:
+            print('corrected-total-ch' + chan + '.value', report['corrected_total'][chan])
 
-    elif any('wan-uncorrectable' in word for word in args):
-        try:
-            for chan in report['uncorrectable']:
-                print('down-uncorrectable-ch' + chan + '.value',
-                      report['uncorrectable'][chan])
-        except KeyError:  # silently tolerate this section being absent
-            pass
+    elif any('wan-error-uncorr' in word for word in args):
+        for chan in report['uncorrectable_total']:
+            print('uncorrected-total-ch' + chan + '.value', report['uncorrectable_total'][chan])
+
+    # elif any('wan-corrected' in word for word in args):
+    #     try:
+    #         for chan in report['corrected']:
+    #             print('down-corrected-ch' + chan + '.value',
+    #                   report['corrected'][chan])
+    #     except KeyError:  # silently tolerate this section being absent
+    #         pass
+
+    # elif any('wan-uncorrectable' in word for word in args):
+    #     try:
+    #         for chan in report['uncorrectable']:
+    #             print('down-uncorrectable-ch' + chan + '.value',
+    #                   report['uncorrectable'][chan])
+    #     except KeyError:  # silently tolerate this section being absent
+    #         pass
 
     elif any('wan-ping' in word for word in args):
         print('latency.value', report['next_hop_latency'])
@@ -192,8 +202,8 @@ def getStatusIntoReport():
     report['downsnr'] = {}
     report['downpower'] = {}
     report['uppower'] = {}
-    report['corrected'] = {}
-    report['uncorrectable'] = {}
+    # report['corrected'] = {}
+    # report['uncorrectable'] = {}
     report['corrected_total'] = {}
     report['uncorrectable_total'] = {}
 
@@ -213,22 +223,22 @@ def getStatusIntoReport():
 
             report['corrected_total'][newRow[0]] = newRow[7]
             report['uncorrectable_total'][newRow[0]] = newRow[8]
-            if MINUTES_ELAPSED > 1 and 'corrected_total' in priorReport:
-                try:
-                    perMinute = (float(newRow[7])
-                                 - float(priorReport['corrected_total'][newRow[0]])) \
-                                 / MINUTES_ELAPSED
-                except KeyError:  # silently tolerate this section being absent
-                    perMinute = 0
-                report['corrected'][newRow[0]] = str(max(perMinute, 0))
-            if MINUTES_ELAPSED > 1 and 'uncorrectable_total' in priorReport:
-                try:
-                    perMinute = (float(newRow[8])
-                                 - float(priorReport['uncorrectable_total'][newRow[0]])) \
-                                 / MINUTES_ELAPSED
-                except KeyError:  # silently tolerate this section being absent
-                    perMinute = 0
-                report['uncorrectable'][newRow[0]] = str(max(perMinute, 0))
+            # if MINUTES_ELAPSED > 1 and 'corrected_total' in priorReport:
+            #     try:
+            #         perMinute = (float(newRow[7])
+            #                      - float(priorReport['corrected_total'][newRow[0]])) \
+            #                      / MINUTES_ELAPSED
+            #     except KeyError:  # silently tolerate this section being absent
+            #         perMinute = 0
+            #     report['corrected'][newRow[0]] = str(max(perMinute, 0))
+            # if MINUTES_ELAPSED > 1 and 'uncorrectable_total' in priorReport:
+            #     try:
+            #         perMinute = (float(newRow[8])
+            #                      - float(priorReport['uncorrectable_total'][newRow[0]])) \
+            #                      / MINUTES_ELAPSED
+            #     except KeyError:  # silently tolerate this section being absent
+            #         perMinute = 0
+            #     report['uncorrectable'][newRow[0]] = str(max(perMinute, 0))
 
     block = soup.find('th', string="Upstream Bonded Channels").parent
     block = block.next_sibling  # skip the header rows
@@ -286,11 +296,11 @@ def reportConfig(args):
         graph_vlabel dB
         graph_args --alt-autoscale --lower-limit 0 --rigid
         """))
+        for chan in report['downpower']:
+            print('down-power-ch' + chan + '.label', 'ch' + chan)
         # down-power-spread.label Spread
         # graph_args --alt-autoscale-max --upper-limit 10 --lower-limit 0 --rigid
         # graph_scale no
-        for chan in report['downpower']:
-            print('down-power-ch' + chan + '.label', 'ch' + chan)
 
     elif any('wan-downsnr' in word for word in args):
         print(
@@ -300,39 +310,71 @@ def reportConfig(args):
         graph_vlabel dB
         graph_args --alt-autoscale --lower-limit 38 --rigid
         """))
+        for chan in report['downsnr']:
+            print('down-snr-ch' + chan + '.label', 'ch' + chan)
         # down-snr-spread.label Spread(+30)
         # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
         # graph_scale no
-        for chan in report['downsnr']:
-            print('down-snr-ch' + chan + '.label', 'ch' + chan)
 
-    elif any('wan-corrected' in word for word in args):
+    # elif any('wan-corrected' in word for word in args):
+    #     print(
+    #         textwrap.dedent("""\
+    #     graph_title [7] WAN Downstream Corrected
+    #     graph_category x-wan
+    #     graph_scale no
+    #     graph_vlabel Blocks per Minute
+    #     graph_args --alt-autoscale
+    #     """))
+    #     for chan in report['corrected']:
+    #         print('down-corrected-ch' + chan + '.label', 'ch' + chan)
+    #     # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
+    #     # graph_scale no
+
+    # elif any('wan-uncorrectable' in word for word in args):
+    #     print(
+    #         textwrap.dedent("""\
+    #     graph_title [8] WAN Downstream Uncorrectable
+    #     graph_category x-wan
+    #     graph_scale no
+    #     graph_vlabel Blocks per Minute
+    #     graph_args --alt-autoscale
+    #     """))
+    #     for chan in report['uncorrectable']:
+    #         print('down-uncorrectable-ch' + chan + '.label', 'ch' + chan)
+    #     # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
+    #     # graph_scale no
+
+    elif any('wan-error-corr' in word for word in args):
         print(
             textwrap.dedent("""\
         graph_title [7] WAN Downstream Corrected
-        graph_category x-wan
-        graph_scale no
+        graph_period minute
         graph_vlabel Blocks per Minute
-        graph_args --alt-autoscale
+        graph_scale no
+        graph_category x-wan
         """))
+        for chan in report['corrected_total']:
+            print('corrected-total-ch' + chan + '.label', 'ch' + chan)
+            print('corrected-total-ch' + chan + '.type', 'DERIVE')
+            print('corrected-total-ch' + chan + '.min', '0')
         # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
-        # graph_scale no
-        for chan in report['corrected']:
-            print('down-corrected-ch' + chan + '.label', 'ch' + chan)
+        # graph_args --alt-autoscale
 
-    elif any('wan-uncorrectable' in word for word in args):
+    elif any('wan-error-uncorr' in word for word in args):
         print(
             textwrap.dedent("""\
-        graph_title [8] WAN Downstream Uncorrectable
-        graph_category x-wan
-        graph_scale no
+        graph_title [7] WAN Downstream Uncorrectable
+        graph_period minute
         graph_vlabel Blocks per Minute
-        graph_args --alt-autoscale
+        graph_scale no
+        graph_category x-wan
         """))
+        for chan in report['uncorrectable_total']:
+            print('uncorrected-total-ch' + chan + '.label', 'ch' + chan)
+            print('uncorrected-total-ch' + chan + '.type', 'DERIVE')
+            print('uncorrected-total-ch' + chan + '.min', '0')
         # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
-        # graph_scale no
-        for chan in report['uncorrectable']:
-            print('down-uncorrectable-ch' + chan + '.label', 'ch' + chan)
+        # graph_args --alt-autoscale
 
     elif any('wan-uppower' in word for word in args):
         print(
@@ -342,10 +384,10 @@ def reportConfig(args):
         graph_vlabel dB
         graph_args --alt-autoscale
         """))
-        # up-power-spread.label Spread(+38)
-        # graph_args --alt-autoscale --upper-limit 50 --lower-limit 30 --rigid
         for chan in report['uppower']:
             print('up-power-ch' + chan + '.label', 'ch' + chan)
+        # up-power-spread.label Spread(+38)
+        # graph_args --alt-autoscale --upper-limit 50 --lower-limit 30 --rigid
 
     elif any('wan-ping' in word for word in args):
         print(
