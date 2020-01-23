@@ -15,6 +15,22 @@
     We discern this from args[0], which will tell us what plugin to impersonate and report as.
 
     This version is attuned to the web interface of the Arris SB6183
+
+    TODO:
+    Restructure this to store its state at the location supplied by Munin at runtime, using the following environment variables.
+    MUNIN_PLUGSTATE: directory to be used for storing files that should be accessed by other plugins
+    MUNIN_STATEFILE: single state file to be used by a plugin that wants to track its state from the last time it was requested by the same master
+    Source: http://guide.munin-monitoring.org/en/latest/develop/plugins/advanced-topics.html#storing-the-plugin-s-state
+
+    If this is restructured to create the data file when called as a plugin (instead of by cron), then
+    there needs to be a semaphore or mutex so we don't have simultaneous instances trying to refresh an old data file.
+    Pseudocode:
+        While data file is too old or missing
+            get lock?:
+                scrape data from modem, refresh data file, close it
+            else:
+                wait until lock is released
+        Proceed to open and read data file ...
 """
 
 import datetime
@@ -53,7 +69,7 @@ def main(args):
         # Instead of reporting we scrape the modem, do some math, and store the JSON
 
         reportDateTime()  # get current time into the dictionary
-        if getUptimeIntoReport():  # also a handy check to see if the modem is responding
+        if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
             return 1
         try:  # fetch last-run's data and datetime
             fhInput = open(SIGNAL_JSON_FILE, 'r')
@@ -72,7 +88,7 @@ def main(args):
 
         report['minutes_since_last_run'] = str(MINUTES_ELAPSED)
 
-        if getStatusIntoReport():
+        if not getStatusIntoReport():
             return 1
         getNextHopLatency()  # measured by ping
         try:  # get all the status data from the modem
@@ -160,7 +176,7 @@ def getStatusIntoReport():
         page = requests.get(MODEM_STATUS_URL, timeout=25).text
     except requests.exceptions.RequestException:
         print("modem status page not responding", file=sys.stderr)
-        return 1
+        return False
     page = page.replace('\x0D', '')  # strip unwanted newlines
     soup = BeautifulSoup(str(page), 'html5lib')
 
@@ -170,12 +186,9 @@ def getStatusIntoReport():
     if 'Allowed' not in internetStatus:
         print("Modem indicates no Internet Connection as of (local time):",
               datetime.datetime.now().isoformat(), file=sys.stderr)
-        return 1
+        return False
 
-    # Gather the various data items from the tables...
-    block = soup.find('th', string="Downstream Bonded Channels").parent
-    block = block.next_sibling  # skip the 2 header rows
-    block = block.next_sibling
+    # setup fresh, empty dict's for the incoming data rows
     report['downsnr'] = {}
     report['downpower'] = {}
     report['uppower'] = {}
@@ -184,6 +197,10 @@ def getStatusIntoReport():
     report['corrected_total'] = {}
     report['uncorrectable_total'] = {}
 
+    # Gather the various data items from the tables...
+    block = soup.find('th', string="Downstream Bonded Channels").parent
+    block = block.next_sibling  # skip the 2 header rows
+    block = block.next_sibling
     for row in block.next_siblings:
         if isinstance(row, type(block)):
             newRow = []
@@ -230,8 +247,7 @@ def getStatusIntoReport():
         - min(float(i) for i in report['downpower'].values())
     report['downsnrspread'] = max(float(i) for i in report['downsnr'].values()) \
         - min(float(i) for i in report['downsnr'].values())
-
-    return 0
+    return True
 
 
 def getUptimeIntoReport():
@@ -242,7 +258,7 @@ def getUptimeIntoReport():
         page = requests.get(MODEM_UPTIME_URL, timeout=25).text
     except requests.exceptions.RequestException:
         print("modem uptime page not responding", file=sys.stderr)
-        return 1
+        return False
     page = page.replace('\x0D', '')  # strip unwanted newlines
     soup = BeautifulSoup(str(page), 'html5lib')  # this call takes a long time
 
@@ -256,7 +272,7 @@ def getUptimeIntoReport():
         + int(uptimeElements[1]) * 3600 \
         + int(uptimeElements[0]) * 86400
     report['uptime_seconds'] = str(uptime_seconds)
-    return 0
+    return True
 
 
 def reportConfig(args):
@@ -268,7 +284,7 @@ def reportConfig(args):
         graph_title [3] WAN Downstream Power
         graph_category x-wan
         graph_vlabel dB
-        graph_args --alt-autoscale
+        graph_args --alt-autoscale --lower-limit 0 --rigid
         """))
         # down-power-spread.label Spread
         # graph_args --alt-autoscale-max --upper-limit 10 --lower-limit 0 --rigid
@@ -282,7 +298,7 @@ def reportConfig(args):
         graph_title [4] WAN Downstream SNR
         graph_category x-wan
         graph_vlabel dB
-        graph_args --alt-autoscale
+        graph_args --alt-autoscale --lower-limit 38 --rigid
         """))
         # down-snr-spread.label Spread(+30)
         # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
@@ -334,11 +350,11 @@ def reportConfig(args):
     elif any('wan-ping' in word for word in args):
         print(
             textwrap.dedent("""\
-        graph_title [2] WAN Next-Hop latency
+        graph_title [2] WAN Latency
         graph_vlabel millliSeconds
         graph_category x-wan
         graph_args --alt-autoscale --upper-limit 100 --lower-limit 0 --rigid --allow-shrink
-        latency.label Next-Hop
+        latency.label Latency to target
         latency.colour cc2900
         """))
 
@@ -347,7 +363,7 @@ def reportConfig(args):
             textwrap.dedent("""\
         graph_category x-wan
         graph_title [1] WAN Speedtest
-        graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid --slope-mode
+        graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
         graph_vlabel Megabits/Second
         graph_scale no
         distance.label V-Distance
@@ -364,6 +380,7 @@ def reportConfig(args):
         up.colour 44aa99
         graph_info Graph of Internet Connection Speed
         """))
+        #  --slope-mode
 
     elif any('wan-uptime' in word for word in args):
         print(
@@ -413,6 +430,7 @@ def getNextHopLatency():
     global report, priorReport
     getGateway()
     cmd = "/bin/ping -W 3 -nqc 3 " + report['gateway'] + " 2>/dev/null"
+    # cmd = "/bin/ping -W 3 -nqc 3 " +  LATENCY_TEST_HOST + " 2>/dev/null"
     try:
         output = subprocess.check_output(cmd, shell=True).decode("utf-8")
     except subprocess.CalledProcessError:
@@ -426,9 +444,9 @@ def getNextHopLatency():
                 result = fields[4]
             break
 
-    try:  # clip this value at 100 to spare graph messes when something's wrong
-        if float(result) > 100.0:
-            result = str(100.0)
+    try:  # clip this value to spare graph messes when something's wrong
+        if float(result) > 30.0:
+            result = str(30.0)
     except ValueError:
         result = '0'
     report['next_hop_latency'] = str(result)
@@ -444,7 +462,8 @@ def reportDateTime():
 
 
 # def getfloat(astr): #for when a string might have other text surrounding a float
-#     return str(float( re.findall(r"[-+]?\d*\.\d+|\d+", astr )[0]))
+    # gets just the first complete number, in case there's more than one
+    # return str(float( re.findall(r"[-+]?\d*\.\d+|[-+]?\d+", astr )[0]))
 
 
 def openInput(aFile):
