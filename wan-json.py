@@ -53,10 +53,9 @@ LATENCY_TEST_HOPS = 3
 LATENCY_TEST_HOST = '8.8.4.4'
 report = {}
 priorReport = {}
-# list of all the names by which we might be called, or valid args supplied
+# list of all the names by which we might be called, or valid args that may be present
 plugin_nouns = ['config', 'wan-downpower', 'wan-downsnr', 'wan-uppower', 'wan-uptime', 
                 'wan-error-corr', 'wan-error-uncorr',
-                # 'wan-corrected', 'wan-uncorrectable',
                 'wan-ping', 'wan-speedtest', 'wan-spread']
 
 
@@ -147,22 +146,6 @@ def main(args):
         for chan in report['uncorrectable_total']:
             print('uncorrected-total-ch' + chan + '.value', report['uncorrectable_total'][chan])
 
-    # elif any('wan-corrected' in word for word in args):
-    #     try:
-    #         for chan in report['corrected']:
-    #             print('down-corrected-ch' + chan + '.value',
-    #                   report['corrected'][chan])
-    #     except KeyError:  # silently tolerate this section being absent
-    #         pass
-
-    # elif any('wan-uncorrectable' in word for word in args):
-    #     try:
-    #         for chan in report['uncorrectable']:
-    #             print('down-uncorrectable-ch' + chan + '.value',
-    #                   report['uncorrectable'][chan])
-    #     except KeyError:  # silently tolerate this section being absent
-    #         pass
-
     elif any('wan-ping' in word for word in args):
         print('latency.value', report['next_hop_latency'])
 
@@ -223,22 +206,6 @@ def getStatusIntoReport():
 
             report['corrected_total'][newRow[0]] = newRow[7]
             report['uncorrectable_total'][newRow[0]] = newRow[8]
-            # if MINUTES_ELAPSED > 1 and 'corrected_total' in priorReport:
-            #     try:
-            #         perMinute = (float(newRow[7])
-            #                      - float(priorReport['corrected_total'][newRow[0]])) \
-            #                      / MINUTES_ELAPSED
-            #     except KeyError:  # silently tolerate this section being absent
-            #         perMinute = 0
-            #     report['corrected'][newRow[0]] = str(max(perMinute, 0))
-            # if MINUTES_ELAPSED > 1 and 'uncorrectable_total' in priorReport:
-            #     try:
-            #         perMinute = (float(newRow[8])
-            #                      - float(priorReport['uncorrectable_total'][newRow[0]])) \
-            #                      / MINUTES_ELAPSED
-            #     except KeyError:  # silently tolerate this section being absent
-            #         perMinute = 0
-            #     report['uncorrectable'][newRow[0]] = str(max(perMinute, 0))
 
     block = soup.find('th', string="Upstream Bonded Channels").parent
     block = block.next_sibling  # skip the header rows
@@ -315,34 +282,6 @@ def reportConfig(args):
         # down-snr-spread.label Spread(+30)
         # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
         # graph_scale no
-
-    # elif any('wan-corrected' in word for word in args):
-    #     print(
-    #         textwrap.dedent("""\
-    #     graph_title [7] WAN Downstream Corrected
-    #     graph_category x-wan
-    #     graph_scale no
-    #     graph_vlabel Blocks per Minute
-    #     graph_args --alt-autoscale
-    #     """))
-    #     for chan in report['corrected']:
-    #         print('down-corrected-ch' + chan + '.label', 'ch' + chan)
-    #     # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
-    #     # graph_scale no
-
-    # elif any('wan-uncorrectable' in word for word in args):
-    #     print(
-    #         textwrap.dedent("""\
-    #     graph_title [8] WAN Downstream Uncorrectable
-    #     graph_category x-wan
-    #     graph_scale no
-    #     graph_vlabel Blocks per Minute
-    #     graph_args --alt-autoscale
-    #     """))
-    #     for chan in report['uncorrectable']:
-    #         print('down-uncorrectable-ch' + chan + '.label', 'ch' + chan)
-    #     # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
-    #     # graph_scale no
 
     elif any('wan-error-corr' in word for word in args):
         print(
