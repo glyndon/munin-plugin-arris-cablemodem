@@ -16,6 +16,7 @@
 
     This version is attuned to the web interface of the Arris SB6183
 
+    TODO: determine if this 'mulbigraph' approach works
     TODO:
     Restructure this to store its state at the location supplied by Munin at runtime, using the following environment variables.
     MUNIN_PLUGSTATE: directory to be used for storing files that should be accessed by other plugins
