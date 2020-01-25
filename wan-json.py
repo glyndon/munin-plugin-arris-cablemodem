@@ -72,12 +72,11 @@ def main(args):
         reportDateTime()  # get current time into the dictionary
         if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
             return 1
-        try:  # fetch last-run's data and datetime
+
+        try: # find the distance in time from when we last ran
             fhInput = open(SIGNAL_JSON_FILE, 'r')
             priorReport = json.load(fhInput)
             fhInput.close()
-
-            # find the distance in time from when we last ran
             priorTime = datetime.datetime.fromisoformat(
                 priorReport['datetime_utc'])
             currentTime = datetime.datetime.fromisoformat(
@@ -302,7 +301,7 @@ def reportConfig(args):
     elif any('wan-error-uncorr' in word for word in args):
         print(
             textwrap.dedent("""\
-        graph_title [7] WAN Downstream Uncorrectable
+        graph_title [8] WAN Downstream Uncorrectable
         graph_period minute
         graph_vlabel Blocks per Minute
         graph_scale no
