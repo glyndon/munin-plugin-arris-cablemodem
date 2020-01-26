@@ -40,8 +40,12 @@ def main(args):
         return 0
 
     # speedtest's JSON file is generated elsewhere, we just report it to Munin
-    # TODO: instead, run the test here if the stored report is absent or is older than <constant>
-    # else read the report file and report from it
+    # TODO: instead, use getAgeOfData(SPEEDTEST_JSON_FILE) function
+    # to check if the stored report is absent or is older than <constant>
+    # and run the test here if needed.
+
+    # then, read the speed report file and report from it
+
     print('\nmultigraph wan_speedtest')
     if openInput(SPEEDTEST_JSON_FILE) == 0:
         downloadspeed = float(report['download'] / 1000000)
@@ -374,6 +378,21 @@ def reportDateTime():
 # def getfloat(astr): #for when a string might have other text surrounding a float
     # gets just the first complete number, in case there's more than one
     # return str(float( re.findall(r"[-+]?\d*\.\d+|[-+]?\d+", astr )[0]))
+
+def getAgeOfData(afile):
+        try: # find the distance in time from when we last ran
+            fhInput = open(afile, 'r')
+            priorReport = json.load(fhInput)
+            fhInput.close()
+            priorTime = datetime.datetime.fromisoformat(
+                priorReport['datetime_utc'])
+            currentTime = datetime.datetime.fromisoformat(
+                report['datetime_utc'])
+            MINUTES_ELAPSED = (
+                currentTime - priorTime) / datetime.timedelta(minutes=1)
+        except (FileNotFoundError, OSError, json.decoder.JSONDecodeError):
+            MINUTES_ELAPSED = 0
+        report['minutes_elapsed'] = str(MINUTES_ELAPSED)
 
 
 def openInput(aFile):
