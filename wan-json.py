@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-#!/usr/bin/python3
     Copyright 2017-2020 Gary Dobbins <gary@dobbinsonline.org>
 
     A Munin 'multigraph' plugin that tracks cablemodem status
@@ -13,7 +12,8 @@
     TODO: Check the environment variable MUNIN_CAP_DIRTYCONFIG, ensure it has a value of 1
     if so, also emit values when responding to 'config'
 
-    TODO: Make the speedtest stuff all happen here, so we don't need a cron job for it. (see comments further below)
+    TODO: Make the speedtest stuff all happen here, so we don't need a cron job for it.
+    (see comments further below)
 
     TODO: Try converting it to 'dirtyconfig' mode, to save even more runtime
 """
@@ -44,7 +44,7 @@ def main(args):
 
     # If there's a 'config' param, then just emit the relevant static config report, and end
     if 'config' in args:
-        return reportConfig(args)
+        return emitConfigText(args)
 
     # speedtest's JSON file is generated elsewhere, we just report it to Munin
     # TODO: instead, use getAgeOfDataInMinutes(SPEEDTEST_JSON_FILE, 'timestamp') function
@@ -55,7 +55,7 @@ def main(args):
     # Use os.environ['MUNIN_PLUGSTATE'] to tell us the directory where to put/find the file
 
     print('\nmultigraph wan_speedtest')
-    if openInput(SPEEDTEST_JSON_FILE) == 0:
+    if loadFileIntoReport(SPEEDTEST_JSON_FILE):
         downloadspeed = float(report['download'] / 1000000)
         uploadspeed = float(report['upload'] / 1000000)
         # recompute the miles so the lines on the graph don't coincide so much
@@ -66,12 +66,11 @@ def main(args):
 
     # scrape the modem, do some math, and report it all
 
-    reportDateTime()  # get current time into the dictionary (obsolete)
     if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
-        return 1
+        return False
 
     if not getStatusIntoReport():
-        return 1
+        return False
     getNextHopLatency()  # measured by ping
 
     print('\nmultigraph wan_ping')
@@ -103,9 +102,10 @@ def main(args):
         print('uncorrected-total-ch' + chan + '.value', report['uncorrectable_total'][chan])
 
     print('\nmultigraph wan_uptime')
-    print('uptime.value', float(report['uptime_seconds']) / 86400.0)  # report as days, so divide seconds
+    # report as days, so divide seconds
+    print('uptime.value', float(report['uptime_seconds']) / 86400.0)
 
-    return 0
+    return True
 
 
 def getStatusIntoReport():
@@ -128,12 +128,10 @@ def getStatusIntoReport():
               datetime.datetime.now().isoformat(), file=sys.stderr)
         return False
 
-    # setup fresh, empty dict's for the incoming data rows
+    # setup empty dict's for the incoming data rows
     report['downsnr'] = {}
     report['downpower'] = {}
     report['uppower'] = {}
-    # report['corrected'] = {}
-    # report['uncorrectable'] = {}
     report['corrected_total'] = {}
     report['uncorrectable_total'] = {}
 
@@ -198,9 +196,9 @@ def getUptimeIntoReport():
     report['uptime_seconds'] = str(uptime_seconds)
     return True
 
-def reportConfig(args):
-    print( "\n" +
-        textwrap.dedent("""\
+def emitConfigText(args):
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_speedtest
     graph_category x-wan
     graph_title [1] WAN Speedtest
@@ -208,7 +206,7 @@ def reportConfig(args):
     graph_vlabel Megabits/Second
     graph_scale no
     distance.label V-Distance to """), end="")
-    if not openInput(SPEEDTEST_JSON_FILE):
+    if loadFileIntoReport(SPEEDTEST_JSON_FILE):
         print(report['server']['sponsor'])
     else:
         print("unknown\n")
@@ -227,13 +225,13 @@ def reportConfig(args):
     up.colour 44aa99
     graph_info Graph of Internet Connection Speed"""))
     #  --slope-mode
-    # return 0
+    # return True
 
     if not getStatusIntoReport():  # needed so we report the proper number of channels
-        return 1
+        return False
 
-    print( "\n" +
-        textwrap.dedent("""\
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_ping
     graph_title [2] WAN Latency
     graph_vlabel millliSeconds
@@ -243,8 +241,8 @@ def reportConfig(args):
     getGateway()
     print("latency.label Latency to " + report['gateway'])
 
-    print( "\n" +
-        textwrap.dedent("""\
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_downpower
     graph_title [3] WAN Downstream Power
     graph_category x-wan
@@ -256,8 +254,8 @@ def reportConfig(args):
     # graph_args --alt-autoscale-max --upper-limit 10 --lower-limit 0 --rigid
     # graph_scale no
 
-    print( "\n" +
-        textwrap.dedent("""\
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_downsnr
     graph_title [4] WAN Downstream SNR
     graph_category x-wan
@@ -269,8 +267,8 @@ def reportConfig(args):
     # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
     # graph_scale no
 
-    print( "\n" +
-        textwrap.dedent("""\
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_uppower
     graph_title [5] WAN Upstream Power
     graph_category x-wan
@@ -281,8 +279,8 @@ def reportConfig(args):
     # up-power-spread.label Spread(+38)
     # graph_args --alt-autoscale --upper-limit 50 --lower-limit 30 --rigid
 
-    print( "\n" +
-        textwrap.dedent("""\
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_spread
     graph_title [6] Signal Quality Spread
     graph_args --alt-autoscale
@@ -294,8 +292,8 @@ def reportConfig(args):
     uppowerspread.label Upstream Power spread"""))
     #  --lower-limit 0 --rigid
 
-    print( "\n" +
-        textwrap.dedent("""\
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_error_corr
     graph_title [7] WAN Downstream Corrected
     graph_period minute
@@ -309,8 +307,8 @@ def reportConfig(args):
     # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
     # graph_args --alt-autoscale
 
-    print( "\n" +
-        textwrap.dedent("""\
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_error_uncorr
     graph_title [8] WAN Downstream Uncorrectable
     graph_period minute
@@ -324,8 +322,8 @@ def reportConfig(args):
     # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
     # graph_args --alt-autoscale
 
-    print( "\n" +
-        textwrap.dedent("""\
+    print("\n" +
+          textwrap.dedent("""\
     multigraph wan_uptime
     graph_title [9] Modem Uptime
     graph_args --base 1000 --lower-limit 0
@@ -334,7 +332,7 @@ def reportConfig(args):
     graph_category x-wan
     uptime.label uptime
     uptime.draw AREA"""))
-    return 0
+    return True
 
 
 def getGateway():  # returns success by setting report['gateway']
@@ -379,53 +377,40 @@ def getNextHopLatency():
     report['next_hop_latency'] = str(result)
 
 
-def reportDateTime():
-    global report
-    # utc_offset_sec = time.altzone if time.localtime().tm_isdst else time.timezone
-    # utc_offset = datetime.timedelta(seconds=-utc_offset_sec)
-    # report['datetime'] = datetime.datetime.now().replace(
-    #   tzinfo=datetime.timezone(offset=utc_offset),microsecond=0).isoformat()
-    report['datetime_utc'] = datetime.datetime.utcnow().isoformat()
-
-
-# def getfloat(astr): #for when a string might have other text surrounding a float
-    # gets just the first complete number, in case there's more than one
-    # return str(float( re.findall(r"[-+]?\d*\.\d+|[-+]?\d+", astr )[0]))
-
 def getAgeOfDataInMinutes(afile, json_key):
-        try: # find the distance in time from when we last ran
-            fhInput = open(afile, 'r')
-            priorReport = json.load(fhInput)
-            fhInput.close()
-            priorTime = datetime.datetime.fromisoformat(
-                priorReport['json_key'])
-            currentTime = datetime.datetime.fromisoformat(
-                report['datetime_utc'])
-            MINUTES_ELAPSED = (
-                currentTime - priorTime) / datetime.timedelta(minutes=1)
-        except (FileNotFoundError, OSError, json.decoder.JSONDecodeError):
-            MINUTES_ELAPSED = 999
-        report['minutes_elapsed'] = str(MINUTES_ELAPSED)
+    try: # find the distance in time from when we last ran
+        fhInput = open(afile, 'r')
+        priorReport = json.load(fhInput)
+        fhInput.close()
+        priorTime = datetime.datetime.fromisoformat(
+            priorReport['json_key'])
+        currentTime = datetime.datetime.fromisoformat(
+            report['datetime_utc'])
+        MINUTES_ELAPSED = (
+            currentTime - priorTime) / datetime.timedelta(minutes=1)
+    except (FileNotFoundError, OSError, json.decoder.JSONDecodeError):
+        MINUTES_ELAPSED = 999
+    report['minutes_elapsed'] = str(MINUTES_ELAPSED)
 
 
-def openInput(aFile):
+def loadFileIntoReport(aFile):
     global report
     try:
         fhInput = open(aFile, 'r')
         report = json.load(fhInput)
         fhInput.close()
-        return 0
+        return True
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
         print("error reading", aFile, the_error, file=sys.stderr)
         # sys.exit(1)
-        return 1
+        return False
 
 
 if __name__ == '__main__':
     import sys
     try:
-        main_result = main(sys.argv)
+        main(sys.argv)
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
-        print("error in main():", the_error, file=sys.stderr)
+        print("# error in main():", the_error, file=sys.stderr)
         sys.exit(1)
-    sys.exit(main_result)
+    sys.exit(0)
