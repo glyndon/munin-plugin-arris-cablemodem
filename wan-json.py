@@ -5,23 +5,31 @@
 
     A Munin plugin that acts like several plugins, thanks to Munin's 'multigraph' mode
 
-    This version is attuned to the web interface of the Arris SB6183
+    This version is specifically attuned to the web interface of the
+    Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
+
+    TODO: Use environment variable to determine location of any stateful files
+
+    TODO: Check the environment variable MUNIN_CAP_DIRTYCONFIG, ensure it has a value of 1
+    if so, also emit values when responding to 'config'
+
+    TODO: Make the speedtest stuff all happen here, so we don't need a cron job for it. (see comments further below)
 
     TODO: Try converting it to 'dirtyconfig' mode, to save even more runtime
-    check the environment variable MUNIN_CAP_DIRTYCONFIG, ensure it has a value of 1
-    if so, also emit values when responding to 'config'
 """
 
 import datetime
 import json
 import math
+import os
 import re
 import subprocess
 import textwrap
 import requests
 from bs4 import BeautifulSoup
 
-SPEEDTEST_JSON_FILE = '/var/lib/munin-node/plugin-state/munin/speedtest.json'
+STATEFUL_FILE_DIR = '/var/lib/munin-node/plugin-state/munin'
+SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR + '/speedtest.json'
 MODEM_STATUS_URL = 'http://192.168.100.1/'
 MODEM_UPTIME_URL = 'http://192.168.100.1/RgSwInfo.asp'
 LATENCY_GATEWAY_HOPS = 3
@@ -29,22 +37,23 @@ LATENCY_GATEWAY_HOST = '8.8.4.4'
 LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
 LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 report = {}
+# speedReport = {}
 
 
 def main(args):
-    global report
+    global report, SPEEDTEST_JSON_FILE
 
     # If there's a 'config' param, then just emit the relevant static config report, and end
     if 'config' in args:
-        reportConfig(args)
-        return 0
+        return reportConfig(args)
 
     # speedtest's JSON file is generated elsewhere, we just report it to Munin
-    # TODO: instead, use getAgeOfData(SPEEDTEST_JSON_FILE) function
+    # TODO: instead, use getAgeOfDataInMinutes(SPEEDTEST_JSON_FILE, 'timestamp') function
     # to check if the stored report is absent or is older than <constant>
     # and run the test here if needed.
 
     # then, read the speed report file and report from it
+    # Use os.environ['MUNIN_PLUGSTATE'] to tell us the directory where to put/find the file
 
     print('\nmultigraph wan_speedtest')
     if openInput(SPEEDTEST_JSON_FILE) == 0:
@@ -190,7 +199,6 @@ def getUptimeIntoReport():
     report['uptime_seconds'] = str(uptime_seconds)
     return True
 
-
 def reportConfig(args):
     print( "\n" +
         textwrap.dedent("""\
@@ -200,7 +208,13 @@ def reportConfig(args):
     graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
     graph_vlabel Megabits/Second
     graph_scale no
-    distance.label V-Distance
+    distance.label V-Distance to """), end="")
+    if not openInput(SPEEDTEST_JSON_FILE):
+        print(report['server']['sponsor'])
+    else:
+        print("unknown\n")
+    print(
+        textwrap.dedent("""\
     distance.type GAUGE
     distance.draw LINE
     distance.colour aaaaaa
@@ -379,19 +393,19 @@ def reportDateTime():
     # gets just the first complete number, in case there's more than one
     # return str(float( re.findall(r"[-+]?\d*\.\d+|[-+]?\d+", astr )[0]))
 
-def getAgeOfData(afile):
+def getAgeOfDataInMinutes(afile, json_key):
         try: # find the distance in time from when we last ran
             fhInput = open(afile, 'r')
             priorReport = json.load(fhInput)
             fhInput.close()
             priorTime = datetime.datetime.fromisoformat(
-                priorReport['datetime_utc'])
+                priorReport['json_key'])
             currentTime = datetime.datetime.fromisoformat(
                 report['datetime_utc'])
             MINUTES_ELAPSED = (
                 currentTime - priorTime) / datetime.timedelta(minutes=1)
         except (FileNotFoundError, OSError, json.decoder.JSONDecodeError):
-            MINUTES_ELAPSED = 0
+            MINUTES_ELAPSED = 999
         report['minutes_elapsed'] = str(MINUTES_ELAPSED)
 
 

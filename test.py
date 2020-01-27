@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 
+import os
+
 dicta = {}
+thing = ''
 
 def main(args):
     print('in main...')
+
+try:
+    thing = os.environ['MUNIN_PLUGSTATE']
+    if (thing) == '':
+        print('nothing there')
+except exception as e:
+    print('exception occurred:', e)
+print(thing)
+
 #     # thing(dicta)
 #     # print( 'nothing:', dicta)
 #     triggers = ['config','wan-up','down']
