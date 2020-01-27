@@ -3,7 +3,7 @@
 #!/usr/bin/python3
     Copyright 2017-2020 Gary Dobbins <gary@dobbinsonline.org>
 
-    A Munin plugin that acts like several plugins, thanks to Munin's 'multigraph' mode
+    A Munin 'multigraph' plugin that tracks cablemodem status
 
     This version is specifically attuned to the web interface of the
     Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
@@ -37,7 +37,6 @@ LATENCY_GATEWAY_HOST = '8.8.4.4'
 LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
 LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 report = {}
-# speedReport = {}
 
 
 def main(args):

@@ -2,19 +2,23 @@
 
 import os
 
-dicta = {}
-thing = ''
+# dicta = {}
+# thing = "thing default-global value"
 
 def main(args):
+    global thing
+
     print('in main...')
 
-try:
-    thing = os.environ['MUNIN_PLUGSTATE']
-    if (thing) == '':
-        print('nothing there')
-except exception as e:
-    print('exception occurred:', e)
-print(thing)
+    try:
+        thing = 'no key, this is default'
+        thing = os.environ['MUNIN_PLUGSTATE']
+        # thing = os.environ['PATH']
+    except KeyError:
+        # print('exception occurred:', e)
+        # thing = 'no key found'
+        pass
+    print('MUNIN_PLUGSTATE: ', thing)
 
 #     # thing(dicta)
 #     # print( 'nothing:', dicta)
