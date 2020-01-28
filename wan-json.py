@@ -23,7 +23,7 @@ from bs4 import BeautifulSoup
 
 STATEFUL_FILE_DIR_DEFAULT = '/var/lib/munin-node/plugin-state/munin'
 SPEEDTEST_JSON_FILE = 'speedtest.json'
-SPEEDTEST_MAX_AGE = 60
+SPEEDTEST_MAX_AGE = 54
 SPEEDTEST_RETEST_DOWNLOAD = 25000000
 SPEEDTEST_RETEST_UPLOAD = 1000000
 MODEM_STATUS_URL = 'http://192.168.100.1/'
@@ -43,7 +43,7 @@ def main(args):
     try:
         SPEEDTEST_JSON_FILE = os.environ['MUNIN_PLUGSTATE'] + '/' + SPEEDTEST_JSON_FILE
     except KeyError:
-        SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + SPEEDTEST_JSON_FILE
+        SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + '/' + SPEEDTEST_JSON_FILE
 
     dirtyConfig = False
     try:
@@ -64,6 +64,7 @@ def main(args):
     if minutes_elapsed > SPEEDTEST_MAX_AGE \
         or float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
         or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD:
+        # TODO: consider capping this so it doesn't runaway if the speed stays low
         runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
         speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
 
