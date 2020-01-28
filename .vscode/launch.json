@@ -5,6 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {   "args": ["config"],
+            "env": {
+                "MUNIN_CAP_DIRTYCONFIG": "1",
+                "MUNIN_PLUGSTATE": "./"
+            },
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",

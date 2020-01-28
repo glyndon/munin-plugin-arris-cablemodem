@@ -1,24 +1,81 @@
 #!/usr/bin/env python3
 
 import os
+import datetime
+import json
+import subprocess
 
-# dicta = {}
-# thing = "thing default-global value"
+report = {}
+priorReport = {}
+
+def runSpeedTest(output_json_file):
+
+    CMD = ["/usr/bin/speedtest-cli"]
+    CMD.append("--json")
+
+    # ===== Inclusions below ======
+    # CMD.append("--server")
+    # CMD.append("14162") # ND's server
+    # CMD.append("--server")
+    # CMD.append("5025") # ATT's Cicero, Il server
+    # CMD.append("--server")
+    # CMD.append("5114") # ATT's Detroit server
+    # CMD.append("--server")
+    # CMD.append("5115") # ATT's Indianapolis server
+    # CMD.append("--server")
+    # CMD.append("1776") # Comcast's Chicago server
+
+    # ===== Exclusions below ======
+    # CMD.append("--exclude")
+    # CMD.append("16770") # Fourway.net server; its upload speed varies weirdly
+    # CMD.append("--exclude")
+    # CMD.append("14162") # ND's server
+
+    outFile = open(output_json_file, 'w')
+    result = subprocess.run(CMD, stdout=outFile)
+    outFile.close()
+    # print(result.returncode)
+    return result.returncode == 0  # return a boolean
+
+
+
+
 
 def main(args):
-    global thing
 
-    print('in main...')
+    # runSpeedTest('./speedtest.json')
 
-    try:
-        thing = 'no key, this is default'
-        thing = os.environ['MUNIN_PLUGSTATE']
-        # thing = os.environ['PATH']
-    except KeyError:
-        # print('exception occurred:', e)
-        # thing = 'no key found'
-        pass
-    print('MUNIN_PLUGSTATE: ', thing)
+    currentTime = datetime.datetime.utcnow()
+
+    fhInput = open('./speedtest.json', 'r')
+    report = json.load(fhInput)
+    fhInput.close()
+
+    print('first pass...')
+    # print(json.dumps(report,indent=2,sort_keys=True))
+
+    print('\n   UTC:', currentTime)
+    print('  last:', report['timestamp'][:-1])
+
+    priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
+    print('parsed:', priorTime)
+    # c = currentTime-priorTime
+    print('  diff:', (currentTime-priorTime).total_seconds() / 60)
+
+
+    # global thing
+
+    # print('in main...')
+
+    # try:
+    #     thing = 'no key, this is default'
+    #     thing = os.environ['MUNIN_PLUGSTATE']
+    #     # thing = os.environ['PATH']
+    # except KeyError:
+    #     # print('exception occurred:', e)
+    #     # thing = 'no key found'
+    #     pass
+    # print('MUNIN_PLUGSTATE: ', thing)
 
 #     # thing(dicta)
 #     # print( 'nothing:', dicta)

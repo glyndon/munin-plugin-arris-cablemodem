@@ -7,15 +7,10 @@
     This version is specifically attuned to the web interface of the
     Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
 
-    TODO: Use environment variable to determine location of any stateful files
+    TODO: run speedtest-cli from here, when needed
 
-    TODO: Check the environment variable MUNIN_CAP_DIRTYCONFIG, ensure it has a value of 1
-    if so, also emit values when responding to 'config'
-
-    TODO: Make the speedtest stuff all happen here, so we don't need a cron job for it.
-    (see comments further below)
-
-    TODO: Try converting it to 'dirtyconfig' mode, to save even more runtime
+    TODO: recast the structure so that the config output and values output are adjacent
+    and a decision about dirtyConfig determines whether to include values with config
 """
 
 import datetime
@@ -28,34 +23,97 @@ import textwrap
 import requests
 from bs4 import BeautifulSoup
 
-STATEFUL_FILE_DIR = '/var/lib/munin-node/plugin-state/munin'
-SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR + '/speedtest.json'
+#STATEFUL_FILE_DIR_DEFAULT = '/var/lib/munin-node/plugin-state/munin'
+STATEFUL_FILE_DIR_DEFAULT = './'
+SPEEDTEST_JSON_FILE = '/speedtest.json'
+SPEEDTEST_MAX_AGE = 60
 MODEM_STATUS_URL = 'http://192.168.100.1/'
 MODEM_UPTIME_URL = 'http://192.168.100.1/RgSwInfo.asp'
 LATENCY_GATEWAY_HOPS = 3
 LATENCY_GATEWAY_HOST = '8.8.4.4'
 LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
 LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
-report = {}
 
+report = {}
+speedTestFileExists = False
+
+def runSpeedTest(output_json_file):
+    # print('running speedtest...')
+    # return False # keep this from working for the moment
+    CMD = ["/usr/bin/speedtest-cli"]
+    CMD.append("--json")
+
+    # ===== Inclusions ======
+    # CMD.append("--server")
+    # CMD.append("14162") # ND's server
+    # CMD.append("--server")
+    # CMD.append("5025") # ATT's Cicero, Il server
+    # CMD.append("--server")
+    # CMD.append("5114") # ATT's Detroit server
+    # CMD.append("--server")
+    # CMD.append("5115") # ATT's Indianapolis server
+    # CMD.append("--server")
+    # CMD.append("1776") # Comcast's Chicago server
+
+    # ===== Exclusions ======
+    # CMD.append("--exclude")
+    # CMD.append("16770") # Fourway.net server; its upload speed varies weirdly
+    # CMD.append("--exclude")
+    # CMD.append("14162") # ND's server
+
+    outFile = open(output_json_file, 'w')
+    result = subprocess.run(CMD, stdout=outFile)
+    outFile.close()
+    return result.returncode == 0  # return a boolean
 
 def main(args):
-    global report, SPEEDTEST_JSON_FILE
+    global report, SPEEDTEST_JSON_FILE, speedTestFileExists
 
-    # If there's a 'config' param, then just emit the relevant static config report, and end
+    # Use the munin-supplied folder location, else a default when testing standalone
+    try:
+        SPEEDTEST_JSON_FILE = os.environ['MUNIN_PLUGSTATE'] + SPEEDTEST_JSON_FILE
+    except KeyError:
+        SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + SPEEDTEST_JSON_FILE
+
+    dirtyConfig = False
+    try:
+        if os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1':  # has to exist and be '1'
+            dirtyConfig = True
+    except KeyError:
+        pass
+
+    # See if the existing speed data is in need of updating
+    speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+    currentTime = datetime.datetime.utcnow()
+    try:
+        priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
+        minutes_elapsed = (currentTime - priorTime) / datetime.timedelta(minutes=1)
+    except(KeyError):
+        minutes_elapsed = SPEEDTEST_MAX_AGE + 1
+    if minutes_elapsed > SPEEDTEST_MAX_AGE: # it's too old, generate a new one
+        runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
+        speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+    # else:
+    #     print('NOT running speedtest...')
+    # return
+
+    # scrape the modem, do some math, and print it all
+    if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
+        return False
+
+    if not getStatusIntoReport():  # this call takes a long time
+        return False
+
+    # If there's a 'config' param, then just emit the config report, and end
     if 'config' in args:
-        return emitConfigText(args)
+        result = emitConfigText(args)
+        if not dirtyConfig:
+            return result
+            #else fall thru and report the values too
 
-    # speedtest's JSON file is generated elsewhere, we just report it to Munin
-    # TODO: instead, use getAgeOfDataInMinutes(SPEEDTEST_JSON_FILE, 'timestamp') function
-    # to check if the stored report is absent or is older than <constant>
-    # and run the test here if needed.
-
-    # then, read the speed report file and report from it
-    # Use os.environ['MUNIN_PLUGSTATE'] to tell us the directory where to put/find the file
-
-    print('\nmultigraph wan_speedtest')
-    if loadFileIntoReport(SPEEDTEST_JSON_FILE):
+    if speedTestFileExists:
+        # read the speed report file and print from it
+        print('\nmultigraph wan_speedtest')
         downloadspeed = float(report['download'] / 1000000)
         uploadspeed = float(report['upload'] / 1000000)
         # recompute the miles so the lines on the graph don't coincide so much
@@ -64,13 +122,6 @@ def main(args):
         print('up.value', uploadspeed)
         print('distance.value', distance)
 
-    # scrape the modem, do some math, and report it all
-
-    if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
-        return False
-
-    if not getStatusIntoReport():
-        return False
     getNextHopLatency()  # measured by ping
 
     print('\nmultigraph wan_ping')
@@ -106,7 +157,7 @@ def main(args):
     print('uptime.value', float(report['uptime_seconds']) / 86400.0)
 
     return True
-
+    # end main()
 
 def getStatusIntoReport():
     global report
@@ -197,38 +248,41 @@ def getUptimeIntoReport():
     return True
 
 def emitConfigText(args):
-    print("\n" +
-          textwrap.dedent("""\
-    multigraph wan_speedtest
-    graph_category x-wan
-    graph_title [1] WAN Speedtest
-    graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
-    graph_vlabel Megabits/Second
-    graph_scale no
-    distance.label V-Distance to """), end="")
-    if loadFileIntoReport(SPEEDTEST_JSON_FILE):
-        print(report['server']['sponsor'])
-    else:
-        print("unknown\n")
-    print(
-        textwrap.dedent("""\
-    distance.type GAUGE
-    distance.draw LINE
-    distance.colour aaaaaa
-    down.label Download
-    down.type GAUGE
-    down.draw LINE
-    down.colour 0066cc
-    up.label Upload
-    up.type GAUGE
-    up.draw LINE
-    up.colour 44aa99
-    graph_info Graph of Internet Connection Speed"""))
-    #  --slope-mode
-    # return True
+    global report, speedTestFileExists
 
-    if not getStatusIntoReport():  # needed so we report the proper number of channels
-        return False
+    if speedTestFileExists:
+        print("\n" +
+            textwrap.dedent("""\
+        multigraph wan_speedtest
+        graph_category x-wan
+        graph_title [1] WAN Speedtest
+        graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
+        graph_vlabel Megabits/Second
+        graph_scale no
+        distance.label V-Distance to """), end="")
+        # if loadFileIntoReport(SPEEDTEST_JSON_FILE):
+        print(report['server']['sponsor'])
+        # else:
+        #     print("unknown\n")
+        print(
+            textwrap.dedent("""\
+        distance.type GAUGE
+        distance.draw LINE
+        distance.colour aaaaaa
+        down.label Download
+        down.type GAUGE
+        down.draw LINE
+        down.colour 0066cc
+        up.label Upload
+        up.type GAUGE
+        up.draw LINE
+        up.colour 44aa99
+        graph_info Graph of Internet Connection Speed"""))
+        #  --slope-mode
+        # return True
+
+        # if not getStatusIntoReport():  # needed so we report the proper number of channels
+        #     return False
 
     print("\n" +
           textwrap.dedent("""\
@@ -378,16 +432,15 @@ def getNextHopLatency():
 
 
 def getAgeOfDataInMinutes(afile, json_key):
+    global report
+
     try: # find the distance in time from when we last ran
         fhInput = open(afile, 'r')
         priorReport = json.load(fhInput)
         fhInput.close()
-        priorTime = datetime.datetime.fromisoformat(
-            priorReport['json_key'])
-        currentTime = datetime.datetime.fromisoformat(
-            report['datetime_utc'])
-        MINUTES_ELAPSED = (
-            currentTime - priorTime) / datetime.timedelta(minutes=1)
+        priorTime = datetime.datetime.fromisoformat(priorReport['timestamp'][:-1])
+        currentTime = datetime.datetime.utcnow()
+        MINUTES_ELAPSED = (currentTime - priorTime) / datetime.timedelta(minutes=1)
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError):
         MINUTES_ELAPSED = 999
     report['minutes_elapsed'] = str(MINUTES_ELAPSED)
@@ -397,11 +450,11 @@ def loadFileIntoReport(aFile):
     global report
     try:
         fhInput = open(aFile, 'r')
-        report = json.load(fhInput)
+        report.update(json.load(fhInput))
         fhInput.close()
         return True
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
-        print("error reading", aFile, the_error, file=sys.stderr)
+        print("# error reading", aFile, the_error, file=sys.stderr)
         # sys.exit(1)
         return False
 
@@ -409,8 +462,8 @@ def loadFileIntoReport(aFile):
 if __name__ == '__main__':
     import sys
     try:
-        main(sys.argv)
+        result = main(sys.argv)
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
         print("# error in main():", the_error, file=sys.stderr)
         sys.exit(1)
-    sys.exit(0)
+    sys.exit(0 if result else 1)
