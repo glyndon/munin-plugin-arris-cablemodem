@@ -73,7 +73,6 @@ def main(args):
         return False
     if not getStatusIntoReport():  # this call takes a long time, parsing a lot of HTML
         return False
-    # measure a nearby turnaround using ping
     getNextHopLatency()
 
     if 'config' in args:
@@ -83,11 +82,10 @@ def main(args):
             #else fall thru and report the values too
 
     if speedTestFileExists:
-        # read the speed report file and print from it
         print('\nmultigraph wan_speedtest')
         downloadspeed = float(report['download'] / 1000000)
         uploadspeed = float(report['upload'] / 1000000)
-        # recompute the miles so the lines on the graph don't coincide so much
+        # fiddle with the miles so the lines on the graph don't coincide/vary as much
         distance = math.log(max(1, float(report['server']['d']) - 3)) + 10
         print('down.value', downloadspeed)
         print('up.value', uploadspeed)
@@ -131,7 +129,6 @@ def main(args):
 def getStatusIntoReport():
     global report
 
-    # Get the main page with its various stats
     try:
         page = requests.get(MODEM_STATUS_URL, timeout=25).text
     except requests.exceptions.RequestException:
@@ -144,7 +141,7 @@ def getStatusIntoReport():
     internetStatus = soup.find(
         'td', string="DOCSIS Network Access Enabled").next_sibling.get_text()
     if 'Allowed' not in internetStatus:
-        print("Modem indicates no Internet Connection as of (local time):",
+        print("# Modem indicates no Internet Connection as of (local time):",
               datetime.datetime.now().isoformat(), file=sys.stderr)
         return False
 
@@ -195,7 +192,6 @@ def getStatusIntoReport():
 def getUptimeIntoReport():
     global report
 
-    # Get the 'Up Time' quantity
     try:
         page = requests.get(MODEM_UPTIME_URL, timeout=25).text
     except requests.exceptions.RequestException:
@@ -215,6 +211,7 @@ def getUptimeIntoReport():
         + int(uptimeElements[0]) * 86400
     report['uptime_seconds'] = str(uptime_seconds)
     return True
+
 
 def emitConfigText():
     global report, speedTestFileExists
@@ -376,8 +373,9 @@ def getNextHopLatency():
     try:
         output = subprocess.check_output(cmd, shell=True).decode("utf-8")
     except subprocess.CalledProcessError:
-        report['next_hop_latency'] = 'NaN'
-        return
+        # report['next_hop_latency'] = 'NaN'
+        # return
+        pass
     result = '0'
     for line in output.split('\n'):
         if line.startswith('rtt'):
@@ -385,7 +383,6 @@ def getNextHopLatency():
             if len(fields) > 4:
                 result = fields[4]
             break
-
     try:  # clip this value to spare graph messes when something's wrong
         if float(result) > 30.0:
             result = str(30.0)
@@ -403,7 +400,6 @@ def loadFileIntoReport(aFile):
         return True
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
         print("# error reading", aFile, the_error, file=sys.stderr)
-        # sys.exit(1)
         return False
 
 
@@ -422,6 +418,8 @@ def runSpeedTest(output_json_file):
     # CMD = CMD + ["--exclude", "16770") # Fourway.net server; its upload speed varies weirdly
     # CMD = CMD + ["--exclude", "14162"] # ND's server
 
+    # CMD = CMD + ["--no-download"] # for testing, reports download as 0
+
     outFile = open(output_json_file, 'w')
     result = subprocess.run(CMD, stdout=outFile)
     outFile.close()
@@ -433,6 +431,6 @@ if __name__ == '__main__':
     try:
         resultMain = main(sys.argv)
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
-        print("# error in main():", the_error, file=sys.stderr)
+        print("# error from main():", the_error, file=sys.stderr)
         sys.exit(1)
     sys.exit(0 if resultMain else 1)
