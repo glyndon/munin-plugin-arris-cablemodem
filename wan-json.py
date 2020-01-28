@@ -23,10 +23,11 @@ import textwrap
 import requests
 from bs4 import BeautifulSoup
 
-#STATEFUL_FILE_DIR_DEFAULT = '/var/lib/munin-node/plugin-state/munin'
-STATEFUL_FILE_DIR_DEFAULT = './'
-SPEEDTEST_JSON_FILE = '/speedtest.json'
+STATEFUL_FILE_DIR_DEFAULT = '/var/lib/munin-node/plugin-state/munin'
+SPEEDTEST_JSON_FILE = 'speedtest.json'
 SPEEDTEST_MAX_AGE = 60
+SPEEDTEST_RETEST_DOWNLOAD = 25000000
+SPEEDTEST_RETEST_UPLOAD = 1000000
 MODEM_STATUS_URL = 'http://192.168.100.1/'
 MODEM_UPTIME_URL = 'http://192.168.100.1/RgSwInfo.asp'
 LATENCY_GATEWAY_HOPS = 3
@@ -37,41 +38,12 @@ LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 report = {}
 speedTestFileExists = False
 
-def runSpeedTest(output_json_file):
-    # print('running speedtest...')
-    # return False # keep this from working for the moment
-    CMD = ["/usr/bin/speedtest-cli"]
-    CMD.append("--json")
-
-    # ===== Inclusions ======
-    # CMD.append("--server")
-    # CMD.append("14162") # ND's server
-    # CMD.append("--server")
-    # CMD.append("5025") # ATT's Cicero, Il server
-    # CMD.append("--server")
-    # CMD.append("5114") # ATT's Detroit server
-    # CMD.append("--server")
-    # CMD.append("5115") # ATT's Indianapolis server
-    # CMD.append("--server")
-    # CMD.append("1776") # Comcast's Chicago server
-
-    # ===== Exclusions ======
-    # CMD.append("--exclude")
-    # CMD.append("16770") # Fourway.net server; its upload speed varies weirdly
-    # CMD.append("--exclude")
-    # CMD.append("14162") # ND's server
-
-    outFile = open(output_json_file, 'w')
-    result = subprocess.run(CMD, stdout=outFile)
-    outFile.close()
-    return result.returncode == 0  # return a boolean
-
 def main(args):
     global report, SPEEDTEST_JSON_FILE, speedTestFileExists
 
     # Use the munin-supplied folder location, else a default when testing standalone
     try:
-        SPEEDTEST_JSON_FILE = os.environ['MUNIN_PLUGSTATE'] + SPEEDTEST_JSON_FILE
+        SPEEDTEST_JSON_FILE = os.environ['MUNIN_PLUGSTATE'] + '/' + SPEEDTEST_JSON_FILE
     except KeyError:
         SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + SPEEDTEST_JSON_FILE
 
@@ -88,14 +60,14 @@ def main(args):
     try:
         priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
         minutes_elapsed = (currentTime - priorTime) / datetime.timedelta(minutes=1)
-    except(KeyError):
+    except KeyError:
         minutes_elapsed = SPEEDTEST_MAX_AGE + 1
-    if minutes_elapsed > SPEEDTEST_MAX_AGE: # it's too old, generate a new one
+    # if it's too old, or slow, generate a new one
+    if minutes_elapsed > SPEEDTEST_MAX_AGE \
+        or float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
+        or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD:
         runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
         speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
-    # else:
-    #     print('NOT running speedtest...')
-    # return
 
     # scrape the modem, do some math, and print it all
     if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
@@ -104,9 +76,11 @@ def main(args):
     if not getStatusIntoReport():  # this call takes a long time
         return False
 
+    getNextHopLatency()  # measured by ping
+
     # If there's a 'config' param, then just emit the config report, and end
     if 'config' in args:
-        result = emitConfigText(args)
+        result = emitConfigText()
         if not dirtyConfig:
             return result
             #else fall thru and report the values too
@@ -121,8 +95,6 @@ def main(args):
         print('down.value', downloadspeed)
         print('up.value', uploadspeed)
         print('distance.value', distance)
-
-    getNextHopLatency()  # measured by ping
 
     print('\nmultigraph wan_ping')
     print('latency.value', report['next_hop_latency'])
@@ -247,23 +219,20 @@ def getUptimeIntoReport():
     report['uptime_seconds'] = str(uptime_seconds)
     return True
 
-def emitConfigText(args):
+def emitConfigText():
     global report, speedTestFileExists
 
     if speedTestFileExists:
         print("\n" +
-            textwrap.dedent("""\
+              textwrap.dedent("""\
         multigraph wan_speedtest
         graph_category x-wan
         graph_title [1] WAN Speedtest
         graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
         graph_vlabel Megabits/Second
         graph_scale no
-        distance.label V-Distance to """), end="")
-        # if loadFileIntoReport(SPEEDTEST_JSON_FILE):
+        distance.label Dist. to """), end="")
         print(report['server']['sponsor'])
-        # else:
-        #     print("unknown\n")
         print(
             textwrap.dedent("""\
         distance.type GAUGE
@@ -280,9 +249,6 @@ def emitConfigText(args):
         graph_info Graph of Internet Connection Speed"""))
         #  --slope-mode
         # return True
-
-        # if not getStatusIntoReport():  # needed so we report the proper number of channels
-        #     return False
 
     print("\n" +
           textwrap.dedent("""\
@@ -431,21 +397,6 @@ def getNextHopLatency():
     report['next_hop_latency'] = str(result)
 
 
-def getAgeOfDataInMinutes(afile, json_key):
-    global report
-
-    try: # find the distance in time from when we last ran
-        fhInput = open(afile, 'r')
-        priorReport = json.load(fhInput)
-        fhInput.close()
-        priorTime = datetime.datetime.fromisoformat(priorReport['timestamp'][:-1])
-        currentTime = datetime.datetime.utcnow()
-        MINUTES_ELAPSED = (currentTime - priorTime) / datetime.timedelta(minutes=1)
-    except (FileNotFoundError, OSError, json.decoder.JSONDecodeError):
-        MINUTES_ELAPSED = 999
-    report['minutes_elapsed'] = str(MINUTES_ELAPSED)
-
-
 def loadFileIntoReport(aFile):
     global report
     try:
@@ -459,11 +410,32 @@ def loadFileIntoReport(aFile):
         return False
 
 
+def runSpeedTest(output_json_file):
+    CMD = ["/usr/bin/speedtest-cli"]
+    CMD.append("--json")
+
+    # ===== Inclusions ======
+    # CMD = CMD + ["--server", "14162"]) # ND's server
+    # CMD = CMD + ["--server", "5025"]) # ATT's Cicero, Il server
+    # CMD = CMD + ["--server", "5114"]) # ATT's Detroit server
+    # CMD = CMD + ["--server", "5115"]) # ATT's Indianapolis server
+    # CMD = CMD + ["--server", "1776"]) # Comcast's Chicago server
+
+    # ===== Exclusions ======
+    # CMD = CMD + ["--exclude", "16770") # Fourway.net server; its upload speed varies weirdly
+    # CMD = CMD + ["--exclude", "14162"] # ND's server
+
+    outFile = open(output_json_file, 'w')
+    result = subprocess.run(CMD, stdout=outFile)
+    outFile.close()
+    return result.returncode == 0  # return a boolean
+
+
 if __name__ == '__main__':
     import sys
     try:
-        result = main(sys.argv)
+        resultMain = main(sys.argv)
     except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
         print("# error in main():", the_error, file=sys.stderr)
         sys.exit(1)
-    sys.exit(0 if result else 1)
+    sys.exit(0 if resultMain else 1)

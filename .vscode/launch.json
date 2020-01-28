@@ -7,7 +7,7 @@
         {   "args": ["config"],
             "env": {
                 "MUNIN_CAP_DIRTYCONFIG": "1",
-                "MUNIN_PLUGSTATE": "./"
+                "MUNIN_PLUGSTATE": "/var/lib/munin-node/plugin-state/munin"
             },
             "name": "Python: Current File",
             "type": "python",

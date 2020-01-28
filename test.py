@@ -14,22 +14,15 @@ def runSpeedTest(output_json_file):
     CMD.append("--json")
 
     # ===== Inclusions below ======
-    # CMD.append("--server")
-    # CMD.append("14162") # ND's server
-    # CMD.append("--server")
-    # CMD.append("5025") # ATT's Cicero, Il server
-    # CMD.append("--server")
-    # CMD.append("5114") # ATT's Detroit server
-    # CMD.append("--server")
-    # CMD.append("5115") # ATT's Indianapolis server
-    # CMD.append("--server")
-    # CMD.append("1776") # Comcast's Chicago server
+    # CMD = CMD + ["--server", "14162"]) # ND's server
+    # CMD = CMD + ["--server", "5025"]) # ATT's Cicero, Il server
+    # CMD = CMD + ["--server", "5114"]) # ATT's Detroit server
+    # CMD = CMD + ["--server", "5115"]) # ATT's Indianapolis server
+    # CMD = CMD + ["--server", "1776"]) # Comcast's Chicago server
 
     # ===== Exclusions below ======
-    # CMD.append("--exclude")
-    # CMD.append("16770") # Fourway.net server; its upload speed varies weirdly
-    # CMD.append("--exclude")
-    # CMD.append("14162") # ND's server
+    # CMD = CMD + ["--exclude", "16770") # Fourway.net server; its upload speed varies weirdly
+    # CMD = CMD + ["--exclude", "14162"] # ND's server
 
     outFile = open(output_json_file, 'w')
     result = subprocess.run(CMD, stdout=outFile)
