@@ -9,6 +9,8 @@
 
     TODO: recast the structure so that the config output and values output are adjacent
     and a decision about dirtyConfig determines whether to include values with config
+
+    TODO: other to-do's are scattered about in the code
 """
 
 import datetime
@@ -60,11 +62,11 @@ def main(args):
         minutes_elapsed = (currentTime - priorTime) / datetime.timedelta(minutes=1)
     except KeyError:
         minutes_elapsed = SPEEDTEST_MAX_AGE + 1
-    # if it's too old, or slow, generate a new one
+    # if it's too old, or recorded a slow test, generate a new one
     if minutes_elapsed > SPEEDTEST_MAX_AGE \
         or float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
         or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD:
-        # TODO: consider capping this so it doesn't runaway if the speed stays low
+        # TODO: try capping this so it doesn't runaway if the speed stays low
         runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
         speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
 
@@ -80,6 +82,8 @@ def main(args):
         if not dirtyConfig:
             return result
             #else fall thru and report the values too
+
+    # ==== values report emission starts here ====
 
     if speedTestFileExists:
         print('\nmultigraph wan_speedtest')
@@ -125,93 +129,6 @@ def main(args):
 
     return True
     # end main()
-
-def getStatusIntoReport():
-    global report
-
-    try:
-        page = requests.get(MODEM_STATUS_URL, timeout=25).text
-    except requests.exceptions.RequestException:
-        print("modem status page not responding", file=sys.stderr)
-        return False
-    page = page.replace('\x0D', '')  # strip unwanted newlines
-    soup = BeautifulSoup(str(page), 'html5lib')
-
-    # Before parsing all the numbers, be sure WAN is connected, else do not report
-    internetStatus = soup.find(
-        'td', string="DOCSIS Network Access Enabled").next_sibling.get_text()
-    if 'Allowed' not in internetStatus:
-        print("# Modem indicates no Internet Connection as of (local time):",
-              datetime.datetime.now().isoformat(), file=sys.stderr)
-        return False
-
-    # setup empty dict's for the incoming data rows
-    report['downsnr'] = {}
-    report['downpower'] = {}
-    report['uppower'] = {}
-    report['corrected_total'] = {}
-    report['uncorrectable_total'] = {}
-
-    # Gather the various data items from the tables...
-    block = soup.find('th', string="Downstream Bonded Channels").parent
-    block = block.next_sibling  # skip the 2 header rows
-    block = block.next_sibling
-    for row in block.next_siblings:
-        if isinstance(row, type(block)):
-            newRow = []
-            for column in row:  # grab all the row's numbers into a list
-                if isinstance(column, type(block)):
-                    newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
-
-            report['downpower'][newRow[0]] = newRow[5]
-            report['downsnr'][newRow[0]] = newRow[6]
-
-            report['corrected_total'][newRow[0]] = newRow[7]
-            report['uncorrectable_total'][newRow[0]] = newRow[8]
-
-    block = soup.find('th', string="Upstream Bonded Channels").parent
-    block = block.next_sibling  # skip the header rows
-    block = block.next_sibling
-    for row in block.next_siblings:
-        if isinstance(row, type(block)):
-            newRow = []
-            for column in row:
-                if isinstance(column, type(block)):
-                    newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
-            report['uppower'][newRow[0]] = newRow[6]
-
-    report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) \
-        - min(float(i) for i in report['uppower'].values())
-    report['downpowerspread'] = max(float(i) for i in report['downpower'].values()) \
-        - min(float(i) for i in report['downpower'].values())
-    report['downsnrspread'] = max(float(i) for i in report['downsnr'].values()) \
-        - min(float(i) for i in report['downsnr'].values())
-    return True
-
-
-def getUptimeIntoReport():
-    global report
-
-    try:
-        page = requests.get(MODEM_UPTIME_URL, timeout=25).text
-    except requests.exceptions.RequestException:
-        print("modem uptime page not responding", file=sys.stderr)
-        return False
-    page = page.replace('\x0D', '')  # strip unwanted newlines
-    soup = BeautifulSoup(str(page), 'html5lib')  # this call takes a long time
-
-    block = soup.find('td', string="Up Time")
-    block = block.next_sibling  # skip the header rows
-    block = block.next_sibling
-    uptimeText = block.get_text()
-    uptimeElements = re.findall(r"\d+", uptimeText)
-    uptime_seconds = int(uptimeElements[3]) \
-        + int(uptimeElements[2]) * 60 \
-        + int(uptimeElements[1]) * 3600 \
-        + int(uptimeElements[0]) * 86400
-    report['uptime_seconds'] = str(uptime_seconds)
-    return True
-
 
 def emitConfigText():
     global report, speedTestFileExists
@@ -349,6 +266,93 @@ def emitConfigText():
     return True
 
 
+def getStatusIntoReport():
+    global report
+
+    try:
+        page = requests.get(MODEM_STATUS_URL, timeout=25).text
+    except requests.exceptions.RequestException:
+        print("modem status page not responding", file=sys.stderr)
+        return False
+    page = page.replace('\x0D', '')  # strip unwanted newlines
+    soup = BeautifulSoup(str(page), 'html5lib')
+
+    # Before parsing all the numbers, be sure WAN is connected, else do not report
+    internetStatus = soup.find(
+        'td', string="DOCSIS Network Access Enabled").next_sibling.get_text()
+    if 'Allowed' not in internetStatus:
+        print("# Modem indicates no Internet Connection as of (local time):",
+              datetime.datetime.now().isoformat(), file=sys.stderr)
+        return False
+
+    # setup empty dict's for the incoming data rows
+    report['downsnr'] = {}
+    report['downpower'] = {}
+    report['uppower'] = {}
+    report['corrected_total'] = {}
+    report['uncorrectable_total'] = {}
+
+    # Gather the various data items from the tables...
+    block = soup.find('th', string="Downstream Bonded Channels").parent
+    block = block.next_sibling  # skip the 2 header rows
+    block = block.next_sibling
+    for row in block.next_siblings:
+        if isinstance(row, type(block)):
+            newRow = []
+            for column in row:  # grab all the row's numbers into a list
+                if isinstance(column, type(block)):
+                    newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
+
+            report['downpower'][newRow[0]] = newRow[5]
+            report['downsnr'][newRow[0]] = newRow[6]
+
+            report['corrected_total'][newRow[0]] = newRow[7]
+            report['uncorrectable_total'][newRow[0]] = newRow[8]
+
+    block = soup.find('th', string="Upstream Bonded Channels").parent
+    block = block.next_sibling  # skip the header rows
+    block = block.next_sibling
+    for row in block.next_siblings:
+        if isinstance(row, type(block)):
+            newRow = []
+            for column in row:
+                if isinstance(column, type(block)):
+                    newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
+            report['uppower'][newRow[0]] = newRow[6]
+
+    report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) \
+        - min(float(i) for i in report['uppower'].values())
+    report['downpowerspread'] = max(float(i) for i in report['downpower'].values()) \
+        - min(float(i) for i in report['downpower'].values())
+    report['downsnrspread'] = max(float(i) for i in report['downsnr'].values()) \
+        - min(float(i) for i in report['downsnr'].values())
+    return True
+
+
+def getUptimeIntoReport():
+    global report
+
+    try:
+        page = requests.get(MODEM_UPTIME_URL, timeout=25).text
+    except requests.exceptions.RequestException:
+        print("modem uptime page not responding", file=sys.stderr)
+        return False
+    page = page.replace('\x0D', '')  # strip unwanted newlines
+    soup = BeautifulSoup(str(page), 'html5lib')  # this call takes a long time
+
+    block = soup.find('td', string="Up Time")
+    block = block.next_sibling  # skip the header rows
+    block = block.next_sibling
+    uptimeText = block.get_text()
+    uptimeElements = re.findall(r"\d+", uptimeText)
+    uptime_seconds = int(uptimeElements[3]) \
+        + int(uptimeElements[2]) * 60 \
+        + int(uptimeElements[1]) * 3600 \
+        + int(uptimeElements[0]) * 86400
+    report['uptime_seconds'] = str(uptime_seconds)
+    return True
+
+
 def getGateway():  # returns success by setting report['gateway']
     global report
     cmd = LATENCY_GATEWAY_CMD \
@@ -367,6 +371,7 @@ def getGateway():  # returns success by setting report['gateway']
 
 
 def getNextHopLatency():
+    # TODO: make rational the weird return logic in this
     global report
     getGateway()
     cmd = LATENCY_MEASURE_CMD + report['gateway'] + " 2>/dev/null"
