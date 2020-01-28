@@ -7,8 +7,6 @@
     This version is specifically attuned to the web interface of the
     Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
 
-    TODO: run speedtest-cli from here, when needed
-
     TODO: recast the structure so that the config output and values output are adjacent
     and a decision about dirtyConfig determines whether to include values with config
 """
@@ -69,16 +67,14 @@ def main(args):
         runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
         speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
 
-    # scrape the modem, do some math, and print it all
+    # scrape the modem
     if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
         return False
-
-    if not getStatusIntoReport():  # this call takes a long time
+    if not getStatusIntoReport():  # this call takes a long time, parsing a lot of HTML
         return False
+    # measure a nearby turnaround using ping
+    getNextHopLatency()
 
-    getNextHopLatency()  # measured by ping
-
-    # If there's a 'config' param, then just emit the config report, and end
     if 'config' in args:
         result = emitConfigText()
         if not dirtyConfig:
