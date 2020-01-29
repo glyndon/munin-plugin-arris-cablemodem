@@ -67,7 +67,7 @@ def main(args):
         runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
         speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
 
-    # scrape the modem
+    # scrape the modem's status pages
     if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
         return False
     if not getStatusIntoReport():  # this call takes a long time, parsing a lot of HTML
@@ -400,6 +400,7 @@ def runSpeedTest(output_json_file):
     # CMD = CMD + ["--exclude", "14162"] # ND's server
 
     # CMD = CMD + ["--no-download"] # for testing, reports download as 0
+    # CMD = CMD + ["--version"] # for testing
 
     outFile = open(output_json_file, 'w')
     result = subprocess.run(CMD, stdout=outFile)
