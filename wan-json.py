@@ -76,40 +76,42 @@ def main(args):
 
     # ==== values report emission starts here ====
 
-    if speedTestFileExists:
-        print('\nmultigraph wan_speedtest')
-        if 'config' in args:
-            print(textwrap.dedent("""\
-            graph_title [1] WAN Speedtest
-            graph_vlabel Megabits/Second
-            graph_category x-wan
-            graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
-            graph_scale no
-            distance.label Dist. to """), end="")
+    print('\nmultigraph wan_speedtest')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title [1] WAN Speedtest
+        graph_vlabel Megabits/Second
+        graph_category x-wan
+        graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
+        graph_scale no
+        distance.label Dist. to """), end="")
+        try:
             print(report['server']['sponsor'])
-            print(textwrap.dedent("""\
-            distance.type GAUGE
-            distance.draw LINE
-            distance.colour aaaaaa
-            down.label Download
-            down.type GAUGE
-            down.draw LINE
-            down.colour 0066cc
-            up.label Upload
-            up.type GAUGE
-            up.draw LINE
-            up.colour 44aa99
-            graph_info Graph of Internet Connection Speed"""))
-            #  --slope-mode
-            # return True
-        if dirtyConfig or (not 'config' in args):
-            downloadspeed = float(report['download'] / 1000000)
-            uploadspeed = float(report['upload'] / 1000000)
-            # fiddle with the miles so the lines on the graph don't coincide/vary as much
-            distance = math.log(max(1, float(report['server']['d']) - 3)) + 10
-            print('down.value', downloadspeed)
-            print('up.value', uploadspeed)
-            print('distance.value', distance)
+        except KeyError:
+            print('unknown server')
+        print(textwrap.dedent("""\
+        distance.type GAUGE
+        distance.draw LINE
+        distance.colour aaaaaa
+        down.label Download
+        down.type GAUGE
+        down.draw LINE
+        down.colour 0066cc
+        up.label Upload
+        up.type GAUGE
+        up.draw LINE
+        up.colour 44aa99
+        graph_info Graph of Internet Connection Speed"""))
+        #  --slope-mode
+        # return True
+    if (dirtyConfig or (not 'config' in args)) and  speedTestFileExists:
+        downloadspeed = float(report['download'] / 1000000)
+        uploadspeed = float(report['upload'] / 1000000)
+        # fiddle with the miles so the lines on the graph don't coincide/vary as much
+        distance = math.log(max(1, float(report['server']['d']) - 3)) + 10
+        print('down.value', downloadspeed)
+        print('up.value', uploadspeed)
+        print('distance.value', distance)
 
     print('\nmultigraph wan_ping')
     if 'config' in args:
@@ -379,7 +381,7 @@ def loadFileIntoReport(aFile):
         report.update(json.load(fhInput))
         fhInput.close()
         return True
-    except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
+    except (FileNotFoundError, OSError, PermissionError, json.decoder.JSONDecodeError) as the_error:
         print("# error reading", aFile, the_error, file=sys.stderr)
         return False
 
@@ -402,10 +404,13 @@ def runSpeedTest(output_json_file):
     # CMD = CMD + ["--no-download"] # for testing, reports download as 0
     # CMD = CMD + ["--version"] # for testing
 
-    outFile = open(output_json_file, 'w')
-    result = subprocess.run(CMD, stdout=outFile)
-    outFile.close()
-    return result.returncode == 0  # return a boolean
+    try:
+        outFile = open(output_json_file, 'w')
+        result = subprocess.run(CMD, stdout=outFile)
+        outFile.close()
+        return result.returncode == 0  # return a boolean
+    except (FileNotFoundError, OSError) as the_error:
+        print("# error creating:", output_json_file, the_error, file=sys.stderr)
 
 
 if __name__ == '__main__':
