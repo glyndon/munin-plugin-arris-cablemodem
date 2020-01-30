@@ -208,7 +208,7 @@ def getStatusIntoReport():
     global report
 
     try:
-        page = requests.get(MODEM_STATUS_URL, timeout=25).text
+       page = requests.get(MODEM_STATUS_URL, timeout=25).text
     except requests.exceptions.RequestException:
         print("modem status page not responding", file=sys.stderr)
         return False
