@@ -8,9 +8,6 @@
     Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
 
     TODO: try capping speedtest so it doesn't runaway if the speed stays low
-    
-    TODO: try using the real channel numbers (which vary), not just the ordinal ones,
-        by using [newRow[3]] instead of [newRow[0]]
 """
 
 import datetime
@@ -23,7 +20,7 @@ import textwrap
 import requests
 from bs4 import BeautifulSoup
 
-STATEFUL_FILE_DIR_DEFAULT = '/var/lib/munin-node/plugin-state/munin'
+STATEFUL_FILE_DIR_DEFAULT = '.'
 SPEEDTEST_JSON_FILE = 'speedtest.json'
 SPEEDTEST_MAX_AGE = 54
 SPEEDTEST_RETEST_DOWNLOAD = 25000000
@@ -41,34 +38,12 @@ speedTestFileExists = False
 def main(args):
     global report, SPEEDTEST_JSON_FILE, speedTestFileExists
 
-    # Use the munin-supplied folder location, else a default when testing standalone
-    try:
-        SPEEDTEST_JSON_FILE = os.environ['MUNIN_PLUGSTATE'] + '/' + SPEEDTEST_JSON_FILE
-    except KeyError:
-        SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + '/' + SPEEDTEST_JSON_FILE
-
     dirtyConfig = False
     try:
         if os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1':  # has to exist and be '1'
             dirtyConfig = True
     except KeyError:
         pass
-
-    # See if the existing speed data is in need of updating
-    speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
-    currentTime = datetime.datetime.utcnow()
-    try:
-        priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
-        minutes_elapsed = (currentTime - priorTime) / datetime.timedelta(minutes=1)
-    except KeyError:
-        minutes_elapsed = SPEEDTEST_MAX_AGE + 1
-    # if it's too old, or recorded a slow test, generate a new one
-    if minutes_elapsed > SPEEDTEST_MAX_AGE \
-        or float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
-        or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD:
-        if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
-            runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
-        speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
 
     # scrape the modem's status pages
     if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
@@ -79,6 +54,8 @@ def main(args):
     # ==== report emission starts here ====
 
     print('\nmultigraph wan_speedtest')
+    # See if the existing speed data is in need of updating
+    checkSpeedtestData(args)
     if 'config' in args:
         print(textwrap.dedent("""\
         graph_title [1] WAN Speedtest
@@ -86,26 +63,18 @@ def main(args):
         graph_category x-wan
         graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
         graph_scale no
+        down.label Download
+        down.colour 0066cc
+        up.label Upload
+        up.colour 44aa99
         distance.label Dist. to """), end="")
         try:
             print(report['server']['sponsor'])
         except KeyError:
-            print('unknown server')
+            print('server')
         print(textwrap.dedent("""\
-        distance.type GAUGE
-        distance.draw LINE
         distance.colour aaaaaa
-        down.label Download
-        down.type GAUGE
-        down.draw LINE
-        down.colour 0066cc
-        up.label Upload
-        up.type GAUGE
-        up.draw LINE
-        up.colour 44aa99
         graph_info Graph of Internet Connection Speed"""))
-        #  --slope-mode
-        # return True
     if (dirtyConfig or (not 'config' in args)) and  speedTestFileExists:
         downloadspeed = float(report['download'] / 1000000)
         uploadspeed = float(report['upload'] / 1000000)
@@ -122,23 +91,22 @@ def main(args):
         graph_vlabel millliSeconds
         graph_category x-wan
         graph_args --alt-autoscale --upper-limit 100 --lower-limit 0 --rigid --allow-shrink
-        latency.colour cc2900"""))
-        print("latency.label Latency for", LATENCY_GATEWAY_HOPS, "hops")
-    if (dirtyConfig or (not 'config' in args)) and getNextHopLatency():
+        latency.colour cc2900
+        latency.label Latency for """), end="")
+        print(LATENCY_GATEWAY_HOPS, "hops")
+    if (dirtyConfig or (not 'config' in args)) \
+            and getNextHopLatency():
         print('latency.value', report['next_hop_latency'])
 
     print('\nmultigraph wan_downpower')
     if 'config' in args:
         print(textwrap.dedent("""\
         graph_title [3] WAN Downstream Power
-        graph_category x-wan
         graph_vlabel dB
+        graph_category x-wan
         graph_args --alt-autoscale --lower-limit 0"""))
         for chan in report['downpower']:
-            print('down-power-ch' + chan + '.label', 'ch' + chan)
-        # down-power-spread.label Spread
-        # graph_args --alt-autoscale-max --upper-limit 10 --lower-limit 0 --rigid
-        # graph_scale no
+            print('down-power-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
     if dirtyConfig or (not 'config' in args):
         for chan in report['downpower']:
             print('down-power-ch' + chan + '.value', report['downpower'][chan])
@@ -147,14 +115,11 @@ def main(args):
     if 'config' in args:
         print(textwrap.dedent("""\
         graph_title [4] WAN Downstream SNR
-        graph_category x-wan
         graph_vlabel dB
+        graph_category x-wan
         graph_args --alt-autoscale --lower-limit 33"""))
         for chan in report['downsnr']:
-            print('down-snr-ch' + chan + '.label', 'ch' + chan)
-        # down-snr-spread.label Spread(+30)
-        # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
-        # graph_scale no
+            print('down-snr-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
     if dirtyConfig or (not 'config' in args):
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.value', report['downsnr'][chan])
@@ -162,14 +127,12 @@ def main(args):
     print('\nmultigraph wan_uppower')
     if 'config' in args:
         print(textwrap.dedent("""\
-        graph_title [5] WAN Upstream Power
-        graph_category x-wan
+        graph_title [7] WAN Upstream Power
         graph_vlabel dB
+        graph_category x-wan
         graph_args --alt-autoscale --lower-limit 40 --upper-limit 48"""))
         for chan in report['uppower']:
-            print('up-power-ch' + chan + '.label', 'ch' + chan)
-        # up-power-spread.label Spread(+38)
-        # graph_args --alt-autoscale --upper-limit 50 --lower-limit 30 --rigid
+            print('up-power-ch' + chan + '.label', 'ch' + report['upchannel'][chan])
     if dirtyConfig or (not 'config' in args):
         for chan in report['uppower']:
             print('up-power-ch' + chan + '.value', report['uppower'][chan])
@@ -177,15 +140,14 @@ def main(args):
     print('\nmultigraph wan_spread')
     if 'config' in args:
         print(textwrap.dedent("""\
-        graph_title [6] Signal Quality Spread
-        graph_args --alt-autoscale
-        graph_scale no
+        graph_title [8] Signal Quality Spread
         graph_vlabel dB
         graph_category x-wan
+        graph_args --alt-autoscale --lower-limit 0 --upper-limit 3
+        graph_scale no
         downpowerspread.label Downstream Power spread
         downsnrspread.label Downstream SNR spread
         uppowerspread.label Upstream Power spread"""))
-        #  --lower-limit 0 --rigid
     if dirtyConfig or (not 'config' in args):
         print('downpowerspread.value', report['downpowerspread'])
         print('downsnrspread.value', report['downsnrspread'])
@@ -194,17 +156,16 @@ def main(args):
     print('\nmultigraph wan_error_corr')
     if 'config' in args:
         print(textwrap.dedent("""\
-        graph_title [7] WAN Downstream Corrected
-        graph_period minute
+        graph_title [5] WAN Downstream Corrected
         graph_vlabel Blocks per Minute
-        graph_scale no
-        graph_category x-wan"""))
+        graph_category x-wan
+        graph_args --upper-limit 100 --rigid
+        graph_period minute
+        graph_scale no"""))
         for chan in report['corrected_total']:
-            print('corrected-total-ch' + chan + '.label', 'ch' + chan)
+            print('corrected-total-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
             print('corrected-total-ch' + chan + '.type', 'DERIVE')
             print('corrected-total-ch' + chan + '.min', '0')
-        # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
-        # graph_args --alt-autoscale
     if dirtyConfig or (not 'config' in args):
         for chan in report['corrected_total']:
             print('corrected-total-ch' + chan + '.value', report['corrected_total'][chan])
@@ -212,17 +173,15 @@ def main(args):
     print('\nmultigraph wan_error_uncorr')
     if 'config' in args:
         print(textwrap.dedent("""\
-        graph_title [8] WAN Downstream Uncorrectable
-        graph_period minute
+        graph_title [6] WAN Downstream Uncorrectable
         graph_vlabel Blocks per Minute
-        graph_scale no
-        graph_category x-wan"""))
+        graph_category x-wan
+        graph_period minute
+        graph_scale no"""))
         for chan in report['uncorrectable_total']:
-            print('uncorrected-total-ch' + chan + '.label', 'ch' + chan)
+            print('uncorrected-total-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
             print('uncorrected-total-ch' + chan + '.type', 'DERIVE')
             print('uncorrected-total-ch' + chan + '.min', '0')
-        # graph_args --alt-autoscale  --upper-limit 50 --lower-limit 30 --rigid
-        # graph_args --alt-autoscale
     if dirtyConfig or (not 'config' in args):
         for chan in report['uncorrectable_total']:
             print('uncorrected-total-ch' + chan + '.value', report['uncorrectable_total'][chan])
@@ -231,14 +190,14 @@ def main(args):
     if 'config' in args:
         print(textwrap.dedent("""\
         graph_title [9] Modem Uptime
-        graph_args --base 1000 --lower-limit 0
-        graph_scale no
         graph_vlabel uptime in days
         graph_category x-wan
+        graph_args --base 1000 --lower-limit 0
+        graph_scale no
         uptime.label uptime
         uptime.draw AREA"""))
     if dirtyConfig or (not 'config' in args):
-        # report as days, so divide seconds
+        # report as days, so divide by seconds/day
         print('uptime.value', float(report['uptime_seconds']) / 86400.0)
 
     return True
@@ -270,6 +229,8 @@ def getStatusIntoReport():
     report['uppower'] = {}
     report['corrected_total'] = {}
     report['uncorrectable_total'] = {}
+    report['downchannel'] = {}
+    report['upchannel'] = {}
 
     # Gather the various data items from the tables...
     block = soup.find('th', string="Downstream Bonded Channels").parent
@@ -282,6 +243,7 @@ def getStatusIntoReport():
                 if isinstance(column, type(block)):
                     newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
 
+            report['downchannel'][newRow[0]] = newRow[3]
             report['downpower'][newRow[0]] = newRow[5]
             report['downsnr'][newRow[0]] = newRow[6]
 
@@ -297,6 +259,7 @@ def getStatusIntoReport():
             for column in row:
                 if isinstance(column, type(block)):
                     newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
+            report['upchannel'][newRow[0]] = newRow[3]
             report['uppower'][newRow[0]] = newRow[6]
 
     report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) \
@@ -389,6 +352,30 @@ def loadFileIntoReport(aFile):
         return False
 
 
+def checkSpeedtestData(args):
+    global SPEEDTEST_JSON_FILE, speedTestFileExists
+
+    try: # Use the munin-supplied folder location, or default for standalone
+        SPEEDTEST_JSON_FILE = os.environ['MUNIN_PLUGSTATE'] + '/' + SPEEDTEST_JSON_FILE
+    except KeyError:
+        SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + '/' + SPEEDTEST_JSON_FILE
+
+    speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+    currentTime = datetime.datetime.utcnow()
+    try:
+        priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
+        minutes_elapsed = (currentTime - priorTime) / datetime.timedelta(minutes=1)
+    except KeyError:
+        minutes_elapsed = SPEEDTEST_MAX_AGE + 1
+    # if it's too old, or recorded a slow test, generate a new one
+    if minutes_elapsed > SPEEDTEST_MAX_AGE \
+        or float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
+        or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD:
+        if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
+            runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
+        speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+
+
 def runSpeedTest(output_json_file):
     cmd = "/usr/bin/speedtest-cli --json"
 
@@ -404,7 +391,7 @@ def runSpeedTest(output_json_file):
     # cmd += "--exclude 14162"  # ND's server
 
     # cmd += "--no-download"  # for testing, reports download as 0
-    # cmd += "--version"  # for testing
+    # cmd += "--version"  # for testing, does nothing
 
     try:
         outFile = open(output_json_file, 'w')
