@@ -5,55 +5,103 @@ import datetime
 import json
 import subprocess
 
+LATENCY_GATEWAY_HOPS = 3
+LATENCY_GATEWAY_HOST = '8.8.4.4'
+LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
+LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
+
 report = {}
-priorReport = {}
-
-def runSpeedTest(output_json_file):
-
-    CMD = ["/usr/bin/speedtest-cli"]
-    CMD.append("--json")
-
-    # ===== Inclusions below ======
-    # CMD = CMD + ["--server", "14162"]) # ND's server
-    # CMD = CMD + ["--server", "5025"]) # ATT's Cicero, Il server
-    # CMD = CMD + ["--server", "5114"]) # ATT's Detroit server
-    # CMD = CMD + ["--server", "5115"]) # ATT's Indianapolis server
-    # CMD = CMD + ["--server", "1776"]) # Comcast's Chicago server
-
-    # ===== Exclusions below ======
-    # CMD = CMD + ["--exclude", "16770") # Fourway.net server; its upload speed varies weirdly
-    # CMD = CMD + ["--exclude", "14162"] # ND's server
-
-    outFile = open(output_json_file, 'w')
-    result = subprocess.run(CMD, stdout=outFile)
-    outFile.close()
-    # print(result.returncode)
-    return result.returncode == 0  # return a boolean
-
-
-
-
 
 def main(args):
+    global report
+    # issue the command to discover the gateway at the designated hop distance
+    cmd = LATENCY_GATEWAY_CMD \
+        + str(LATENCY_GATEWAY_HOPS) \
+        + " " \
+        + LATENCY_GATEWAY_HOST
+    try:
+        output = result = subprocess.run(cmd.split(' '), capture_output=True)
+    except subprocess.CalledProcessError:
+        pass
+    # parse the results for the IP addr of that hop
+    result = '0'
+    for line in output.stdout.decode("utf-8").split('\n'):
+        if line.startswith(' ' + str(LATENCY_GATEWAY_HOPS) + ' '):
+            result = line.split(' ')
+            if len(result) > 3:
+                result = result[3]
+            break
+    report['gateway'] = str(result)
+    # issue the command to measure latency to that hop
+    cmd = LATENCY_MEASURE_CMD + report['gateway'] # + " 2>/dev/null"
+    try:
+        output = result = subprocess.run(cmd.split(' '), capture_output=True)
+    except subprocess.CalledProcessError:
+        pass
+    # parse the results for the 4th field which is the average delay
+    result = '0'
+    for line in output.stdout.decode("utf-8").split('\n'):
+        print(line)
+        if line.startswith('rtt'):
+            fields = line.split('/')
+            if len(fields) > 4:
+                result = fields[4]
+            break
+    # clip this value to spare graph messes when something's wrong
+    try:
+        if float(result) > 30.0:
+            result = str(30.0)
+    except ValueError:
+        result = '0'
+    report['next_hop_latency'] = str(result)
 
-    # runSpeedTest('./speedtest.json')
 
-    currentTime = datetime.datetime.utcnow()
 
-    fhInput = open('./speedtest.json', 'r')
-    report = json.load(fhInput)
-    fhInput.close()
 
-    print('first pass...')
-    # print(json.dumps(report,indent=2,sort_keys=True))
 
-    print('\n   UTC:', currentTime)
-    print('  last:', report['timestamp'][:-1])
+    print(json.dumps(report,indent=2))
 
-    priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
-    print('parsed:', priorTime)
-    # c = currentTime-priorTime
-    print('  diff:', (currentTime-priorTime).total_seconds() / 60)
+
+
+
+# def runSpeedTest(output_json_file):
+
+#     CMD = ["/usr/bin/speedtest-cli"]
+#     CMD.append("--json")
+
+#     # ===== Inclusions below ======
+#     # CMD = CMD + ["--server", "14162"]) # ND's server
+#     # CMD = CMD + ["--server", "5025"]) # ATT's Cicero, Il server
+#     # CMD = CMD + ["--server", "5114"]) # ATT's Detroit server
+#     # CMD = CMD + ["--server", "5115"]) # ATT's Indianapolis server
+#     # CMD = CMD + ["--server", "1776"]) # Comcast's Chicago server
+
+#     # ===== Exclusions below ======
+#     # CMD = CMD + ["--exclude", "16770") # Fourway.net server; its upload speed varies weirdly
+#     # CMD = CMD + ["--exclude", "14162"] # ND's server
+
+#     outFile = open(output_json_file, 'w')
+#     result = subprocess.run(CMD, stdout=outFile)
+#     outFile.close()
+#     # print(result.returncode)
+#     return result.returncode == 0  # return a boolean
+
+#     currentTime = datetime.datetime.utcnow()
+
+#     fhInput = open('./speedtest.json', 'r')
+#     report = json.load(fhInput)
+#     fhInput.close()
+
+#     print('first pass...')
+#     # print(json.dumps(report,indent=2,sort_keys=True))
+
+#     print('\n   UTC:', currentTime)
+#     print('  last:', report['timestamp'][:-1])
+
+#     priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
+#     print('parsed:', priorTime)
+#     # c = currentTime-priorTime
+#     print('  diff:', (currentTime-priorTime).total_seconds() / 60)
 
 
     # global thing

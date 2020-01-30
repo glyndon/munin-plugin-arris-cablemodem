@@ -7,7 +7,10 @@
     This version is specifically attuned to the web interface of the
     Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
 
-    TODO: other to-do's are scattered about in the code
+    TODO: try capping speedtest so it doesn't runaway if the speed stays low
+    
+    TODO: try using the real channel numbers (which vary), not just the ordinal ones,
+        by using [newRow[3]] instead of [newRow[0]]
 """
 
 import datetime
@@ -63,8 +66,8 @@ def main(args):
     if minutes_elapsed > SPEEDTEST_MAX_AGE \
         or float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
         or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD:
-        # TODO: try capping this so it doesn't runaway if the speed stays low
-        runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
+        if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
+            runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
         speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
 
     # scrape the modem's status pages
@@ -72,9 +75,8 @@ def main(args):
         return False
     if not getStatusIntoReport():  # this call takes a long time, parsing a lot of HTML
         return False
-    getNextHopLatency()
 
-    # ==== values report emission starts here ====
+    # ==== report emission starts here ====
 
     print('\nmultigraph wan_speedtest')
     if 'config' in args:
@@ -121,9 +123,8 @@ def main(args):
         graph_category x-wan
         graph_args --alt-autoscale --upper-limit 100 --lower-limit 0 --rigid --allow-shrink
         latency.colour cc2900"""))
-        getGateway()
-        print("latency.label Latency to " + report['gateway'])
-    if dirtyConfig or (not 'config' in args):
+        print("latency.label Latency for", LATENCY_GATEWAY_HOPS, "hops")
+    if (dirtyConfig or (not 'config' in args)) and getNextHopLatency():
         print('latency.value', report['next_hop_latency'])
 
     print('\nmultigraph wan_downpower')
@@ -132,7 +133,7 @@ def main(args):
         graph_title [3] WAN Downstream Power
         graph_category x-wan
         graph_vlabel dB
-        graph_args --alt-autoscale --lower-limit 0 --rigid"""))
+        graph_args --alt-autoscale --lower-limit 0"""))
         for chan in report['downpower']:
             print('down-power-ch' + chan + '.label', 'ch' + chan)
         # down-power-spread.label Spread
@@ -148,7 +149,7 @@ def main(args):
         graph_title [4] WAN Downstream SNR
         graph_category x-wan
         graph_vlabel dB
-        graph_args --alt-autoscale --lower-limit 38 --rigid"""))
+        graph_args --alt-autoscale --lower-limit 33"""))
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.label', 'ch' + chan)
         # down-snr-spread.label Spread(+30)
@@ -164,7 +165,7 @@ def main(args):
         graph_title [5] WAN Upstream Power
         graph_category x-wan
         graph_vlabel dB
-        graph_args --alt-autoscale"""))
+        graph_args --alt-autoscale --lower-limit 40 --upper-limit 48"""))
         for chan in report['uppower']:
             print('up-power-ch' + chan + '.label', 'ch' + chan)
         # up-power-spread.label Spread(+38)
@@ -331,47 +332,49 @@ def getUptimeIntoReport():
     return True
 
 
-def getGateway():  # returns success by setting report['gateway']
+    # expected return is that report['gateway'] and report'next_hop_latency'] exist
+def getNextHopLatency():
     global report
+    # issue the command to discover the gateway at the designated hop distance
     cmd = LATENCY_GATEWAY_CMD \
         + str(LATENCY_GATEWAY_HOPS) \
         + " " \
         + LATENCY_GATEWAY_HOST
-    output = subprocess.check_output(cmd, shell=True).decode("utf-8")
+    try:
+        output = result = subprocess.run(cmd.split(' '), capture_output=True)
+    except subprocess.CalledProcessError:
+        return False
+    # parse the results for the IP addr of that hop
     result = '0'
-    for line in output.split('\n'):
+    for line in output.stdout.decode("utf-8").split('\n'):
         if line.startswith(' ' + str(LATENCY_GATEWAY_HOPS) + ' '):
             result = line.split(' ')
             if len(result) > 3:
                 result = result[3]
             break
     report['gateway'] = str(result)
-
-
-def getNextHopLatency():
-    # TODO: make rational the weird return logic in this
-    global report
-    getGateway()
-    cmd = LATENCY_MEASURE_CMD + report['gateway'] + " 2>/dev/null"
+    # issue the command to measure latency to that hop
+    cmd = LATENCY_MEASURE_CMD + report['gateway'] # + " 2>/dev/null"
     try:
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8")
+        output = result = subprocess.run(cmd.split(' '), capture_output=True)
     except subprocess.CalledProcessError:
-        # report['next_hop_latency'] = 'NaN'
-        # return
-        pass
+        return False
+    # parse the results for the 4th field which is the average delay
     result = '0'
-    for line in output.split('\n'):
+    for line in output.stdout.decode("utf-8").split('\n'):
         if line.startswith('rtt'):
             fields = line.split('/')
             if len(fields) > 4:
                 result = fields[4]
             break
-    try:  # clip this value to spare graph messes when something's wrong
+    # clip this value's peaks to spare graph messes when something's wrong
+    try:
         if float(result) > 30.0:
             result = str(30.0)
     except ValueError:
         result = '0'
     report['next_hop_latency'] = str(result)
+    return True
 
 
 def loadFileIntoReport(aFile):
@@ -387,26 +390,25 @@ def loadFileIntoReport(aFile):
 
 
 def runSpeedTest(output_json_file):
-    CMD = ["/usr/bin/speedtest-cli"]
-    CMD.append("--json")
+    cmd = "/usr/bin/speedtest-cli --json"
 
     # ===== Inclusions ======
-    # CMD = CMD + ["--server", "14162"]) # ND's server
-    # CMD = CMD + ["--server", "5025"]) # ATT's Cicero, Il server
-    # CMD = CMD + ["--server", "5114"]) # ATT's Detroit server
-    # CMD = CMD + ["--server", "5115"]) # ATT's Indianapolis server
-    # CMD = CMD + ["--server", "1776"]) # Comcast's Chicago server
+    # cmd += "--server 14162"  # ND's server
+    # cmd += "--server 5025"  # ATT's Cicero, Il server
+    # cmd += "--server 5114"  # ATT's Detroit server
+    # cmd += "--server 5115"  # ATT's Indianapolis server
+    # cmd += "--server 1776"  # Comcast's Chicago server
 
     # ===== Exclusions ======
-    # CMD = CMD + ["--exclude", "16770") # Fourway.net server; its upload speed varies weirdly
-    # CMD = CMD + ["--exclude", "14162"] # ND's server
+    # cmd += "--exclude 16770"  # Fourway.net server; its upload speed varies weirdly
+    # cmd += "--exclude 14162"  # ND's server
 
-    # CMD = CMD + ["--no-download"] # for testing, reports download as 0
-    # CMD = CMD + ["--version"] # for testing
+    # cmd += "--no-download"  # for testing, reports download as 0
+    # cmd += "--version"  # for testing
 
     try:
         outFile = open(output_json_file, 'w')
-        result = subprocess.run(CMD, stdout=outFile)
+        result = subprocess.run(cmd.split(' '), stdout=outFile)
         outFile.close()
         return result.returncode == 0  # return a boolean
     except (FileNotFoundError, OSError) as the_error:
