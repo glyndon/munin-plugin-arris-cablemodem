@@ -55,18 +55,18 @@ def main(args):
 
     latencyValid = getNextHopLatency()
 
+    # See if the stored speed data exists or is in need of updating
     speedTestFileExists = checkSpeedtestData(args)
 
     # ==== report emission starts here ====
 
     print('\nmultigraph wan_speedtest')
-    # See if the existing speed data is in need of updating
     if 'config' in args:
         print(textwrap.dedent("""\
         graph_title [1] WAN Speedtest
         graph_vlabel Megabits/Second
         graph_category x-wan
-        graph_args --base 1000 --lower-limit 0 --upper-limit 35 --rigid
+        graph_args --base 1000 --lower-limit 0 --upper-limit 33 --rigid
         graph_scale no
         down.label Download
         down.colour 0066cc
@@ -95,7 +95,7 @@ def main(args):
         graph_title [2] WAN Latency
         graph_vlabel millliSeconds
         graph_category x-wan
-        graph_args --alt-autoscale --upper-limit 100 --lower-limit 0 --rigid --allow-shrink
+        graph_args --alt-autoscale --upper-limit 33 --lower-limit 0 --rigid --allow-shrink
         latency.colour cc2900
         latency.label Latency for """), end="")
         print(LATENCY_GATEWAY_HOPS, "hops")
@@ -108,7 +108,7 @@ def main(args):
         graph_title [3] WAN Downstream Power
         graph_vlabel dB
         graph_category x-wan
-        graph_args --alt-autoscale --lower-limit 0"""))
+        graph_args --alt-autoscale --lower-limit 4"""))
         for chan in report['downpower']:
             print('down-power-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
     if dirtyConfig or (not 'config' in args):
@@ -121,7 +121,7 @@ def main(args):
         graph_title [4] WAN Downstream SNR
         graph_vlabel dB
         graph_category x-wan
-        graph_args --alt-autoscale --lower-limit 33"""))
+        graph_args --alt-autoscale --lower-limit 38"""))
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
     if dirtyConfig or (not 'config' in args):
@@ -163,7 +163,7 @@ def main(args):
         graph_title [5] WAN Downstream Corrected
         graph_vlabel Blocks per Minute
         graph_category x-wan
-        graph_args --upper-limit 100 --rigid
+        graph_args --upper-limit 33 --rigid
         graph_period minute
         graph_scale no"""))
         for chan in report['corrected_total']:
@@ -180,6 +180,7 @@ def main(args):
         graph_title [6] WAN Downstream Uncorrectable
         graph_vlabel Blocks per Minute
         graph_category x-wan
+        graph_args --upper-limit 33 --rigid
         graph_period minute
         graph_scale no"""))
         for chan in report['uncorrectable_total']:
@@ -374,9 +375,10 @@ def checkSpeedtestData(args):
     except KeyError:
         minutes_elapsed = SPEEDTEST_MAX_AGE + 1
     # if it's too old, or recorded a slow test, generate a new one
-    if minutes_elapsed > SPEEDTEST_MAX_AGE \
-        or float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
-        or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD:
+    if minutes_elapsed > SPEEDTEST_MAX_AGE or \
+        ((float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
+         or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD) \
+         and minutes_elapsed > 9): # wait ~10 minutes to retest, so the graph can better show the hiccup
         if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
             runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
         result = loadFileIntoReport(SPEEDTEST_JSON_FILE)
