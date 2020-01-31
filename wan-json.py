@@ -27,13 +27,14 @@ SPEEDTEST_RETEST_DOWNLOAD = 25000000
 SPEEDTEST_RETEST_UPLOAD = 1000000
 MODEM_STATUS_URL = 'http://192.168.100.1/'
 MODEM_UPTIME_URL = 'http://192.168.100.1/RgSwInfo.asp'
-LATENCY_GATEWAY_HOPS = 3
 LATENCY_GATEWAY_HOST = '8.8.4.4'
 LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
+LATENCY_GATEWAY_HOPS = 3
 LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 
 report = {}
 speedTestFileExists = False
+latencyValid = False
 
 def main(args):
     global report, SPEEDTEST_JSON_FILE, speedTestFileExists
@@ -51,6 +52,8 @@ def main(args):
 
     if not getStatusIntoReport():  # this call takes a long time, parsing a lot of HTML
         return False
+
+    latencyValid = getNextHopLatency()
 
     # ==== report emission starts here ====
 
@@ -95,8 +98,7 @@ def main(args):
         latency.colour cc2900
         latency.label Latency for """), end="")
         print(LATENCY_GATEWAY_HOPS, "hops")
-    if (dirtyConfig or (not 'config' in args)) \
-            and getNextHopLatency():
+    if (dirtyConfig or (not 'config' in args)) and latencyValid:
         print('latency.value', report['next_hop_latency'])
 
     print('\nmultigraph wan_downpower')
@@ -299,6 +301,8 @@ def getUptimeIntoReport():
     # expected return is that report['gateway'] and report'next_hop_latency'] exist
 def getNextHopLatency():
     global report
+    report['gateway'] = ''
+    report['next_hop_latency'] = '0'
     # issue the command to discover the gateway at the designated hop distance
     cmd = LATENCY_GATEWAY_CMD \
         + str(LATENCY_GATEWAY_HOPS) \

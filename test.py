@@ -15,10 +15,11 @@ report = {}
 def main(args):
 
 
-    fh = open('status.html','rb') #.decode('utf-8')
+    fh = open('mystatus.html','r') # or use mode 'rb' and then b'char' in replace function below 
     page = fh.read()
     fh.close()
-    page = page.replace(b'\x0D', b'')  # strip unwanted newlines
+    # page = page.replace('\n', '')  # strip unwanted newlines
+    page = page.replace('\x00', '')  # strip unwanted linefeeds
     
     print(page)
     # soup = BeautifulSoup(str(page), 'html5lib')
