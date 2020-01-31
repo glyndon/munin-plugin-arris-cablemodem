@@ -48,6 +48,7 @@ def main(args):
     # scrape the modem's status pages
     if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
         return False
+
     if not getStatusIntoReport():  # this call takes a long time, parsing a lot of HTML
         return False
 
@@ -216,8 +217,8 @@ def getStatusIntoReport():
     soup = BeautifulSoup(str(page), 'html5lib')
 
     # Before parsing all the numbers, be sure WAN is connected, else do not report
-    internetStatus = soup.find(
-        'td', string="DOCSIS Network Access Enabled").next_sibling.get_text()
+    td = soup.find('td', string="DOCSIS Network Access Enabled")
+    internetStatus = td.next_sibling.get_text()
     if 'Allowed' not in internetStatus:
         print("# Modem indicates no Internet Connection as of (local time):",
               datetime.datetime.now().isoformat(), file=sys.stderr)

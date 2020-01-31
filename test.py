@@ -13,54 +13,64 @@ LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 report = {}
 
 def main(args):
-    global report
-    # issue the command to discover the gateway at the designated hop distance
-    cmd = LATENCY_GATEWAY_CMD \
-        + str(LATENCY_GATEWAY_HOPS) \
-        + " " \
-        + LATENCY_GATEWAY_HOST
-    try:
-        output = result = subprocess.run(cmd.split(' '), capture_output=True)
-    except subprocess.CalledProcessError:
-        pass
-    # parse the results for the IP addr of that hop
-    result = '0'
-    for line in output.stdout.decode("utf-8").split('\n'):
-        if line.startswith(' ' + str(LATENCY_GATEWAY_HOPS) + ' '):
-            result = line.split(' ')
-            if len(result) > 3:
-                result = result[3]
-            break
-    report['gateway'] = str(result)
-    # issue the command to measure latency to that hop
-    cmd = LATENCY_MEASURE_CMD + report['gateway'] # + " 2>/dev/null"
-    try:
-        output = result = subprocess.run(cmd.split(' '), capture_output=True)
-    except subprocess.CalledProcessError:
-        pass
-    # parse the results for the 4th field which is the average delay
-    result = '0'
-    for line in output.stdout.decode("utf-8").split('\n'):
-        print(line)
-        if line.startswith('rtt'):
-            fields = line.split('/')
-            if len(fields) > 4:
-                result = fields[4]
-            break
-    # clip this value to spare graph messes when something's wrong
-    try:
-        if float(result) > 30.0:
-            result = str(30.0)
-    except ValueError:
-        result = '0'
-    report['next_hop_latency'] = str(result)
+
+
+    fh = open('status.html','rb') #.decode('utf-8')
+    page = fh.read()
+    fh.close()
+    page = page.replace(b'\x0D', b'')  # strip unwanted newlines
+    
+    print(page)
+    # soup = BeautifulSoup(str(page), 'html5lib')
+    # print(soup.prettify())
+    # return False
 
 
 
+    # # issue the command to discover the gateway at the designated hop distance
+    # cmd = LATENCY_GATEWAY_CMD \
+    #     + str(LATENCY_GATEWAY_HOPS) \
+    #     + " " \
+    #     + LATENCY_GATEWAY_HOST
+    # try:
+    #     output = result = subprocess.run(cmd.split(' '), capture_output=True)
+    # except subprocess.CalledProcessError:
+    #     pass
+    # # parse the results for the IP addr of that hop
+    # result = '0'
+    # for line in output.stdout.decode("utf-8").split('\n'):
+    #     if line.startswith(' ' + str(LATENCY_GATEWAY_HOPS) + ' '):
+    #         result = line.split(' ')
+    #         if len(result) > 3:
+    #             result = result[3]
+    #         break
+    # report['gateway'] = str(result)
+    # # issue the command to measure latency to that hop
+    # cmd = LATENCY_MEASURE_CMD + report['gateway'] # + " 2>/dev/null"
+    # try:
+    #     output = result = subprocess.run(cmd.split(' '), capture_output=True)
+    # except subprocess.CalledProcessError:
+    #     pass
+    # # parse the results for the 4th field which is the average delay
+    # result = '0'
+    # for line in output.stdout.decode("utf-8").split('\n'):
+    #     print(line)
+    #     if line.startswith('rtt'):
+    #         fields = line.split('/')
+    #         if len(fields) > 4:
+    #             result = fields[4]
+    #         break
+    # # clip this value to spare graph messes when something's wrong
+    # try:
+    #     if float(result) > 30.0:
+    #         result = str(30.0)
+    # except ValueError:
+    #     result = '0'
+    # report['next_hop_latency'] = str(result)
 
 
-    print(json.dumps(report,indent=2))
 
+    # print(json.dumps(report,indent=2))
 
 
 
