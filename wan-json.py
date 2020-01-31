@@ -37,7 +37,7 @@ speedTestFileExists = False
 latencyValid = False
 
 def main(args):
-    global report, SPEEDTEST_JSON_FILE, speedTestFileExists
+    global report, SPEEDTEST_JSON_FILE, latencyValid, speedTestFileExists
 
     dirtyConfig = False
     try:
@@ -46,7 +46,7 @@ def main(args):
     except KeyError:
         pass
 
-    # scrape the modem's status pages
+    # scrape the modem's pages
     if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
         return False
 
@@ -55,11 +55,12 @@ def main(args):
 
     latencyValid = getNextHopLatency()
 
+    speedTestFileExists = checkSpeedtestData(args)
+
     # ==== report emission starts here ====
 
     print('\nmultigraph wan_speedtest')
     # See if the existing speed data is in need of updating
-    checkSpeedtestData(args)
     if 'config' in args:
         print(textwrap.dedent("""\
         graph_title [1] WAN Speedtest
@@ -211,7 +212,7 @@ def getStatusIntoReport():
     global report
 
     try:
-       page = requests.get(MODEM_STATUS_URL, timeout=25).text
+        page = requests.get(MODEM_STATUS_URL, timeout=25).text
     except requests.exceptions.RequestException:
         print("modem status page not responding", file=sys.stderr)
         return False
@@ -358,14 +359,14 @@ def loadFileIntoReport(aFile):
 
 
 def checkSpeedtestData(args):
-    global SPEEDTEST_JSON_FILE, speedTestFileExists
+    global SPEEDTEST_JSON_FILE  # , speedTestFileExists
 
     try: # Use the munin-supplied folder location, or default for standalone
         SPEEDTEST_JSON_FILE = os.environ['MUNIN_PLUGSTATE'] + '/' + SPEEDTEST_JSON_FILE
     except KeyError:
         SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + '/' + SPEEDTEST_JSON_FILE
 
-    speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+    result = loadFileIntoReport(SPEEDTEST_JSON_FILE)
     currentTime = datetime.datetime.utcnow()
     try:
         priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
@@ -378,7 +379,8 @@ def checkSpeedtestData(args):
         or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD:
         if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
             runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
-        speedTestFileExists = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+        result = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+    return result
 
 
 def runSpeedTest(output_json_file):
