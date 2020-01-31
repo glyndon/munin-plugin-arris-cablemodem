@@ -14,14 +14,21 @@ report = {}
 
 def main(args):
 
+    da = {'one': '1', 'two': '2', 'three': '3'}
+    db = {'four': '4', 'five': '5', 'six': '6'}
 
-    fh = open('mystatus.html','r') # or use mode 'rb' and then b'char' in replace function below 
-    page = fh.read()
-    fh.close()
-    # page = page.replace('\n', '')  # strip unwanted newlines
-    page = page.replace('\x00', '')  # strip unwanted linefeeds
+    db['extra'] = 'socks'
+    db['also'] = da
+
+    print(json.dumps(db,indent=2))
+
+    # fh = open('mystatus.html','r') # or use mode 'rb' and then b'char' in replace function below 
+    # page = fh.read()
+    # fh.close()
+    # # page = page.replace('\n', '')  # strip unwanted newlines
+    # page = page.replace('\x00', '')  # strip unwanted linefeeds
     
-    print(page)
+    # print(page)
     # soup = BeautifulSoup(str(page), 'html5lib')
     # print(soup.prettify())
     # return False
