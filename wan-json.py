@@ -281,7 +281,7 @@ def getUptimeIntoReport():
     except requests.exceptions.RequestException:
         print("modem uptime page not responding", file=sys.stderr)
         return False
-    page = page.replace('\x0D', '')  # strip unwanted newlines
+    page = page.replace('\x0D', '')  # strip unwanted newlines, conider also stripping nulls
     soup = BeautifulSoup(str(page), 'html5lib')  # this call takes a long time
 
     block = soup.find('td', string="Up Time")
