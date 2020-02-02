@@ -39,12 +39,10 @@ latencyValid = False
 def main(args):
     global report, SPEEDTEST_JSON_FILE, latencyValid, speedTestFileExists
 
-    dirtyConfig = False
     try:
-        if os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1':  # has to exist and be '1'
-            dirtyConfig = True
+        dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'  # has to exist and be '1'
     except KeyError:
-        pass
+        dirtyConfig = False
 
     # scrape the modem's pages
     if not getUptimeIntoReport():  # also a handy check to see if the modem is responding

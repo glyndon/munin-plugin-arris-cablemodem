@@ -1,26 +1,81 @@
 #!/usr/bin/env python3
 
+import html.parser
 import os
 import datetime
 import json
 import subprocess
 
-LATENCY_GATEWAY_HOPS = 3
-LATENCY_GATEWAY_HOST = '8.8.4.4'
-LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
-LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
+class ArrisHTMLParser(html.parser.HTMLParser):
+    state = None
+    row = 0
+    col = 0
+    table_type = None
+    result_model = None
+    result_downstream = []
+    result_upstream = []
 
-report = {}
+    def handle_starttag(self, tag, attrs):
+        for key, value in attrs:
+            if key == 'id' and value == 'thisModelNumberIs':
+                self.state = 'model'
+        if tag == 'table':
+            self.state = 'table'
+            self.table_type = None
+            self.row = 0
+            self.col = 0
+        if tag == 'tr':
+            self.row = self.row + 1
+            self.col = 0
+        if tag == 'td':
+            self.col = self.col + 1
+
+    def handle_endtag(self, tag):
+        if tag == 'table' and self.state == 'table':
+            self.state = None
+
+    def handle_data(self, data):
+        data = data.strip()
+        if data:
+            print(data)
+            # if self.state == 'model':
+            #     self.result_model = data
+            #     self.state = None
 
 def main(args):
 
-    da = {'one': '1', 'two': '2', 'three': '3'}
-    db = {'four': '4', 'five': '5', 'six': '6'}
+    page = open('modem2.html','r')
 
-    db['extra'] = 'socks'
-    db['also'] = da
+    parser = ArrisHTMLParser()
+    parser.feed(page.read()) # .decode('utf-8')
 
-    print(json.dumps(db,indent=2))
+
+
+
+
+
+
+
+
+
+    # f = open('statefile')
+    # report = json.load(f)
+    # f.close()
+    # print(type(report))
+    # for key in sorted(report['downstream_channels']):
+    #     print("downsnr{0}.label Channel {1}".format(key, report['downstream_channels'][key]['channel_id']))
+    #     print('id', report['downstream_channels'][key]['channel_id'], key)
+
+    # print(json.dumps(report, indent=2))
+
+
+    # da = {'one': '1', 'two': '2', 'three': '3'}
+    # db = {'four': '4', 'five': '5', 'six': '6'}
+
+    # db['extra'] = 'socks'
+    # db['also'] = da
+
+    # print(json.dumps(db,indent=2))
 
     # fh = open('mystatus.html','r') # or use mode 'rb' and then b'char' in replace function below 
     # page = fh.read()
@@ -179,7 +234,7 @@ def main(args):
 #     # if './test.py' in args:
 #     #     print('up hit')
 #     # print(len(args)==1)
-#     pass
+    pass
 
 if __name__ == '__main__':
     import sys
