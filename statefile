@@ -1,0 +1,184 @@
+{
+  "downstream_channels": {
+    "1": {
+      "channel_id": "7",
+      "errors_corrected": "22703",
+      "errors_uncorrectables": "110",
+      "frequency_mhz": 561.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.9",
+      "snr_db": "41.2"
+    },
+    "2": {
+      "channel_id": "33",
+      "errors_corrected": "1122",
+      "errors_uncorrectables": "174",
+      "frequency_mhz": 495.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.1",
+      "snr_db": "41.9"
+    },
+    "3": {
+      "channel_id": "34",
+      "errors_corrected": "1576",
+      "errors_uncorrectables": "92",
+      "frequency_mhz": 501.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.6",
+      "snr_db": "42.0"
+    },
+    "4": {
+      "channel_id": "35",
+      "errors_corrected": "2192",
+      "errors_uncorrectables": "98",
+      "frequency_mhz": 507.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.4",
+      "snr_db": "40.2"
+    },
+    "5": {
+      "channel_id": "36",
+      "errors_corrected": "3143",
+      "errors_uncorrectables": "121",
+      "frequency_mhz": 513.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.0",
+      "snr_db": "41.6"
+    },
+    "6": {
+      "channel_id": "1",
+      "errors_corrected": "2832",
+      "errors_uncorrectables": "108",
+      "frequency_mhz": 519.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.6",
+      "snr_db": "42.0"
+    },
+    "7": {
+      "channel_id": "2",
+      "errors_corrected": "3757",
+      "errors_uncorrectables": "89",
+      "frequency_mhz": 525.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.7",
+      "snr_db": "42.0"
+    },
+    "8": {
+      "channel_id": "3",
+      "errors_corrected": "5234",
+      "errors_uncorrectables": "96",
+      "frequency_mhz": 531.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.5",
+      "snr_db": "41.8"
+    },
+    "9": {
+      "channel_id": "4",
+      "errors_corrected": "8182",
+      "errors_uncorrectables": "100",
+      "frequency_mhz": 537.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.6",
+      "snr_db": "41.8"
+    },
+    "10": {
+      "channel_id": "5",
+      "errors_corrected": "11729",
+      "errors_uncorrectables": "85",
+      "frequency_mhz": 543.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.7",
+      "snr_db": "41.7"
+    },
+    "11": {
+      "channel_id": "6",
+      "errors_corrected": "18054",
+      "errors_uncorrectables": "85",
+      "frequency_mhz": 555.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.6",
+      "snr_db": "41.2"
+    },
+    "12": {
+      "channel_id": "8",
+      "errors_corrected": "28927",
+      "errors_uncorrectables": "269",
+      "frequency_mhz": 567.0,
+      "modulation": "QAM256",
+      "power_dbmv": "6.8",
+      "snr_db": "41.2"
+    },
+    "13": {
+      "channel_id": "9",
+      "errors_corrected": "32133",
+      "errors_uncorrectables": "162",
+      "frequency_mhz": 573.0,
+      "modulation": "QAM256",
+      "power_dbmv": "7.0",
+      "snr_db": "41.8"
+    },
+    "14": {
+      "channel_id": "10",
+      "errors_corrected": "42881",
+      "errors_uncorrectables": "396",
+      "frequency_mhz": 579.0,
+      "modulation": "QAM256",
+      "power_dbmv": "7.2",
+      "snr_db": "41.8"
+    },
+    "15": {
+      "channel_id": "11",
+      "errors_corrected": "49581",
+      "errors_uncorrectables": "570",
+      "frequency_mhz": 585.0,
+      "modulation": "QAM256",
+      "power_dbmv": "7.2",
+      "snr_db": "41.8"
+    },
+    "16": {
+      "channel_id": "12",
+      "errors_corrected": "62732",
+      "errors_uncorrectables": "599",
+      "frequency_mhz": 591.0,
+      "modulation": "QAM256",
+      "power_dbmv": "7.1",
+      "snr_db": "41.5"
+    }
+  },
+  "model": "SB6183",
+  "upstream_channels": {
+    "1": {
+      "channel_id": "9",
+      "frequency_mhz": 35.8,
+      "locked": "Locked",
+      "modulation": "ATDMA",
+      "power_dbmv": "42.8",
+      "width_mhz": 5.12
+    },
+    "2": {
+      "channel_id": "10",
+      "frequency_mhz": 29.4,
+      "locked": "Locked",
+      "modulation": "ATDMA",
+      "power_dbmv": "43.3",
+      "width_mhz": 5.12
+    },
+    "3": {
+      "channel_id": "11",
+      "frequency_mhz": 23.0,
+      "locked": "Locked",
+      "modulation": "ATDMA",
+      "power_dbmv": "43.5",
+      "width_mhz": 5.12
+    },
+    "4": {
+      "channel_id": "12",
+      "frequency_mhz": 16.6,
+      "locked": "Locked",
+      "modulation": "ATDMA",
+      "power_dbmv": "43.5",
+      "width_mhz": 5.12
+    }
+  },
+  "uptime": "3 days 23h:44m:20s"
+}
