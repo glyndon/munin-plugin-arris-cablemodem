@@ -1,376 +1,475 @@
 #!/usr/bin/env python3
-# Copyright 2018 Brad House
-# MIT license
-# Modified for SB6183 by Glyndon, 2020/2/1
+"""
+    Copyright 2017-2020 Gary Dobbins <gary@dobbinsonline.org>
 
-# TODO: Add signal quality spresd, speedtest, and ping-latency graphs
-# TODO: Make all the external symbols match the wan-json code,
-#       so they can be used intrchangeablly
+    A Munin 'multigraph' plugin that tracks cablemodem status
 
-import html.parser
+    This version self-adjusts between the web interface of the
+    Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
+    and the
+    Arris SB8200 firmware: <tbd>
+
+    TODO: provide exponential backoff for speedtest, so it doesn't run too much if the speed stays low
+    x TODO: add channel frequencies, so we can see if they get changed over time
+    x TODO: change the name to something more indicative of its function
+    x TODO: get model number and include it in the graph titles
+    x TODO: use model number to set column numbers and URLs
+    x TODO: experiment with other parsers that might be faster, and encodings of the input stream
+"""
+
+import datetime
+import json
+import math
 import os
 import re
-import urllib.request
-import sys
-import json
+import subprocess
+import textwrap
+import requests
+from bs4 import BeautifulSoup
 
+STATEFUL_FILE_DIR_DEFAULT = '.'
+SPEEDTEST_JSON_FILE = 'speedtest.json'
+SPEEDTEST_MAX_AGE = 54
+SPEEDTEST_RETEST_DOWNLOAD = 25000000
+SPEEDTEST_RETEST_UPLOAD = 1000000
+MODEM_STATUS_URL = 'http://192.168.100.1/' # All Arris modems start here
+MODEM_UPTIME_URL = '' # gets set based on model number
+LATENCY_GATEWAY_HOST = '8.8.4.4'
+LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
+LATENCY_GATEWAY_HOPS = 3
+LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 
-class ArrisHTMLParser(html.parser.HTMLParser):
-    state = None
-    row = 0
-    col = 0
-    table_type = None
-    result_model = None
-    result_uptime = None
-    result_downstream = []
-    result_upstream = []
+report = {}
 
-    def handle_starttag(self, tag, attrs):
-        for key, value in attrs:
-            if key == 'id' and value == 'thisModelNumberIs':
-                self.state = 'model'
-        if tag == 'table':
-            self.state = 'table'
-            self.table_type = None
-            self.row = 0
-            self.col = 0
-        if tag == 'tr':
-            self.row = self.row + 1
-            self.col = 0
-        if tag == 'td':
-            self.col = self.col + 1
-
-    def handle_endtag(self, tag):
-        if tag == 'table' and self.state == 'table':
-            self.state = None
-
-    def handle_data(self, data):
-        data = data.strip()
-        if data:
-            if self.state == 'model':
-                self.result_model = data
-                self.state = None
-            if self.state == 'table' and self.table_type is None and self.row == 1 and self.col == 0:
-                if data == 'Downstream Bonded Channels':
-                    self.table_type = 'downstream'
-                if data == 'Upstream Bonded Channels':
-                    self.table_type = 'upstream'
-                if data == 'Status':
-                    self.table_type = 'status'
-            if self.state == 'table' and self.table_type == 'status' and self.row > 1 and self.col > 1:
-                self.result_uptime = data
-                self.state = None
-            if self.state == 'table' and self.table_type == 'downstream' and self.row > 2 and self.col > 0:
-                idx = self.row - 3
-                if len(self.result_downstream) <= idx:
-                    self.result_downstream.append({})
-                if self.col == 1: # Channel position
-                    self.result_downstream[idx]['channel']               = data
-                if self.col == 2: # Lock Status
-                    self.result_downstream[idx]['locked']                = data
-                if self.col == 3: # Modulation
-                    self.result_downstream[idx]['modulation']            = data
-                if self.col == 4: # Channel_ID
-                    self.result_downstream[idx]['channel_id']            = data
-                if self.col == 5: # Frequency
-                    self.result_downstream[idx]['frequency_mhz']         = (int)(data.split(" ")[0]) / 1000000
-                if self.col == 6: # Power
-                    self.result_downstream[idx]['power_dbmv']            = data.split(" ")[0]
-                if self.col == 7: # SNR
-                    self.result_downstream[idx]['snr_db']                = data.split(" ")[0]
-                if self.col == 8: # Corrected, div by 5 for a per-minute rate
-                    self.result_downstream[idx]['errors_corrected']      = data
-                if self.col == 9: # Uncorrectables, div by 5 for a per-minute rate
-                    self.result_downstream[idx]['errors_uncorrectables'] = data
-            if self.state == 'table' and self.table_type == 'upstream' and self.row > 2 and self.col > 0:
-                idx = self.row - 3
-                if len(self.result_upstream) <= idx:
-                    self.result_upstream.append({})
-                if self.col == 1: # Channel
-                    self.result_upstream[idx]['channel'] = data
-                if self.col == 2: # Lock Status
-                    self.result_upstream[idx]['locked']        = data
-                if self.col == 3: # Channel type
-                    self.result_upstream[idx]['type']          = data
-                if self.col == 4: # Channel ID
-                    self.result_upstream[idx]['channel_id']    = data
-                if self.col == 5: # Width
-                    self.result_upstream[idx]['width_mhz']     = (int)(data.split(" ")[0]) / 1000
-                if self.col == 6: # Frequency
-                    self.result_upstream[idx]['frequency_mhz'] = (int)(data.split(" ")[0]) / 1000000
-                if self.col == 7: # Power
-                    self.result_upstream[idx]['power_dbmv']    = data.split(" ")[0]
-
-def parse_url(url):
-    try:
-        page = urllib.request.urlopen(url, None, 30)
-    except:
-        return None
-
-    parser = ArrisHTMLParser()
-    parser.feed(page.read().decode('utf-8'))
-
-    # Convert into a "nicer" format
-    result = {}
-    result['model'] = parser.result_model
-    result['uptime'] = parser.result_uptime
-    result['downstream_channels'] = {}
-    result['upstream_channels'] = {}
-
-    for item in parser.result_downstream:
-        if item['modulation'] == 'QAM256':
-            channel = (int)(item['channel'])
-            result['downstream_channels'][channel] = {}
-            result['downstream_channels'][channel]['modulation']            = item['modulation']
-            result['downstream_channels'][channel]['channel_id']            = item['channel_id']
-            result['downstream_channels'][channel]['frequency_mhz']         = item['frequency_mhz']
-            result['downstream_channels'][channel]['power_dbmv']            = item['power_dbmv']
-            result['downstream_channels'][channel]['snr_db']                = item['snr_db']
-            result['downstream_channels'][channel]['errors_corrected']      = item['errors_corrected']
-            result['downstream_channels'][channel]['errors_uncorrectables'] = item['errors_uncorrectables']
-
-    for item in parser.result_upstream:
-        channel = (int)(item['channel'])
-        result['upstream_channels'][channel] = {}
-        result['upstream_channels'][channel]['modulation']    = item['type']
-        result['upstream_channels'][channel]['locked']        = item['locked']
-        result['upstream_channels'][channel]['channel_id']    = item['channel_id']
-        result['upstream_channels'][channel]['frequency_mhz'] = item['frequency_mhz']
-        result['upstream_channels'][channel]['width_mhz']     = item['width_mhz']
-        result['upstream_channels'][channel]['power_dbmv']    = item['power_dbmv']
-
-    return result
-
-
-# Goal of this function is if we only get partial results back from the cable modem, we
-#  still need to have a properly structured tree with the right elements just with no
-#  values so configuration information can be output as appropriate at any time.
-def merge_result(data):
-    isgood = True
+def main(args):
+    global report, SPEEDTEST_JSON_FILE, MODEM_UPTIME_URL
 
     try:
-        with open(os.environ['MUNIN_STATEFILE']) as f:
-            old_data = json.load(f)
-    except:
-        old_data = None
+        dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'  # has to exist and be '1'
+    except KeyError:
+        dirtyConfig = False
 
-    if not data:
-        data = {}
+    if not getStatusIntoReport():  # this call also sets the URL for the uptime page
+        return False
 
-    # populate model
-    if 'model' not in data:
-        if 'model' in old_data:
-            data['model'] = old_data['model']
-        else:
-            data['model'] = 'cablemodem'
+    if 'SB6183' in report['model_name']:
+        MODEM_UPTIME_URL = 'http://192.168.100.1/RgSwInfo.asp'
+    if 'SB8200' in report['model_name']:
+        MODEM_UPTIME_URL = 'http://192.168.100.1/cmswinfo.html'
 
-    # populate uptime
-    if 'uptime' not in data:
-        if 'uptime' in old_data:
-            data['uptime'] = old_data['uptime']
-        else:
-            data['uptime'] = '0'
+    if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
+        return False
 
-    # populate downstream_channels
-    if 'downstream_channels' not in data or not data['downstream_channels']:
-        isgood = False
-        data['downstream_channels'] = {}
-        # Create Data
-        if old_data and 'downstream_channels' in old_data:
-            for channel in old_data['downstream_channels']:
-                channel=(int)(channel)
-                data['downstream_channels'][channel]                          = {}
-                data['downstream_channels'][channel]['modulation']            = None
-                data['downstream_channels'][channel]['channel_id']            = None
-                data['downstream_channels'][channel]['frequency_mhz']         = None
-                data['downstream_channels'][channel]['power_dbmv']            = None
-                data['downstream_channels'][channel]['snr_db']                = None
-                data['downstream_channels'][channel]['errors_corrected']      = None
-                data['downstream_channels'][channel]['errors_uncorrectables'] = None
+    latencyValid = getNextHopLatency()
 
-    # populate upstream_channels
-    if 'upstream_channels' not in data or not data['upstream_channels']:
-        isgood = False
-        data['upstream_channels'] = {}
-        # Create data
-        if old_data and 'upstream_channels' in old_data:
-            for channel in old_data['upstream_channels']:
-                channel=(int)(channel)
-                data['upstream_channels'][channel]                  = {}
-                data['upstream_channels'][channel]['modulation']    = None
-                data['upstream_channels'][channel]['locked']        = None
-                data['upstream_channels'][channel]['channel_id']    = None
-                data['upstream_channels'][channel]['frequency_mhz'] = None
-                data['upstream_channels'][channel]['width_mhz']     = None
-                data['upstream_channels'][channel]['power_dbmv']    = None
+    # See if the stored speed data exists or is in need of updating
+    speedTestFileExists = checkSpeedtestData(args)
 
-    # Cache fully good result
-    if isgood:
-        # print("writing state file")
-        with open(os.environ['MUNIN_STATEFILE'], 'w') as f:
-            json.dump(data, f, indent=2, sort_keys=True)
+    # ==== report emission starts here ====
 
-    return data
+    print('\nmultigraph wan_speedtest')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [01]: Speedtest
+        graph_vlabel Megabits/Second
+        graph_category x-wan
+        graph_args --lower-limit 0
+        graph_scale no
+        down.label Download
+        down.colour 0066cc
+        up.label Upload
+        up.colour 44aa99
+        distance.label Dist. to """).format(report['model_name']), end="")
+        try:
+            print(report['server']['sponsor'])
+        except KeyError:
+            print('server')
+        print(textwrap.dedent("""\
+        distance.colour aaaaaa
+        graph_info Graph of Internet Connection Speed"""))
+    if (dirtyConfig or (not 'config' in args)) and  speedTestFileExists:
+        downloadspeed = float(report['download'] / 1000000)
+        uploadspeed = float(report['upload'] / 1000000)
+        # fiddle with the miles so the lines on the graph don't coincide/vary as much
+        distance = math.log(max(1, float(report['server']['d']) - 3)) + 10
+        print('down.value', downloadspeed)
+        print('up.value', uploadspeed)
+        print('distance.value', distance)
 
-def convertUptimeToDays(uptime_string):
-    uptimeElements = re.findall(r"\d+", uptime_string)
+    print('\nmultigraph wan_ping')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [02]: Latency
+        graph_vlabel millliSeconds
+        graph_category x-wan
+        graph_args --alt-autoscale --upper-limit 33 --lower-limit 0 --rigid --allow-shrink
+        latency.colour cc2900
+        latency.label Latency for """).format(report['model_name']), end="")
+        print(LATENCY_GATEWAY_HOPS, "hops")
+    if (dirtyConfig or (not 'config' in args)) and latencyValid:
+        print('latency.value', report['next_hop_latency'])
+
+    print('\nmultigraph wan_downpower')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [03]: Downstream Power
+        graph_vlabel dB
+        graph_category x-wan
+        graph_args --alt-autoscale --lower-limit 4""").format(report['model_name']))
+        for chan in report['downpower']:
+            print('down-power-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
+    if dirtyConfig or (not 'config' in args):
+        for chan in report['downpower']:
+            print('down-power-ch' + chan + '.value', report['downpower'][chan])
+
+    print('\nmultigraph wan_downsnr')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [04]: Downstream SNR
+        graph_vlabel dB
+        graph_category x-wan
+        graph_args --alt-autoscale --lower-limit 38""").format(report['model_name']))
+        for chan in report['downsnr']:
+            print('down-snr-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
+    if dirtyConfig or (not 'config' in args):
+        for chan in report['downsnr']:
+            print('down-snr-ch' + chan + '.value', report['downsnr'][chan])
+
+    print('\nmultigraph wan_uppower')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [07]: Upstream Power
+        graph_vlabel dB
+        graph_category x-wan
+        graph_args --alt-autoscale --lower-limit 40 --upper-limit 48""").format(report['model_name']))
+        for chan in report['uppower']:
+            print('up-power-ch' + chan + '.label', 'ch' + report['upchannel'][chan])
+    if dirtyConfig or (not 'config' in args):
+        for chan in report['uppower']:
+            print('up-power-ch' + chan + '.value', report['uppower'][chan])
+
+    print('\nmultigraph wan_spread')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [08]: Signal Quality Spread
+        graph_vlabel dB
+        graph_category x-wan
+        graph_args --alt-autoscale --lower-limit 0 --upper-limit 3
+        graph_scale no
+        downpowerspread.label Downstream Power spread
+        downsnrspread.label Downstream SNR spread
+        uppowerspread.label Upstream Power spread""").format(report['model_name']))
+    if dirtyConfig or (not 'config' in args):
+        print('downpowerspread.value', report['downpowerspread'])
+        print('downsnrspread.value', report['downsnrspread'])
+        print('uppowerspread.value', report['uppowerspread'])
+
+    print('\nmultigraph wan_error_corr')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [05]: Downstream Corrected
+        graph_vlabel Blocks per Minute
+        graph_category x-wan
+        graph_args --upper-limit 33 --rigid
+        graph_period minute
+        graph_scale no""").format(report['model_name']))
+        for chan in report['corrected_total']:
+            print('corrected-total-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
+            print('corrected-total-ch' + chan + '.type', 'DERIVE')
+            print('corrected-total-ch' + chan + '.min', '0')
+    if dirtyConfig or (not 'config' in args):
+        for chan in report['corrected_total']:
+            print('corrected-total-ch' + chan + '.value', report['corrected_total'][chan])
+
+    print('\nmultigraph wan_error_uncorr')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [06]: Downstream Uncorrectable
+        graph_vlabel Blocks per Minute
+        graph_category x-wan
+        graph_args --upper-limit 33 --rigid
+        graph_period minute
+        graph_scale no""").format(report['model_name']))
+        for chan in report['uncorrectable_total']:
+            print('uncorrected-total-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
+            print('uncorrected-total-ch' + chan + '.type', 'DERIVE')
+            print('uncorrected-total-ch' + chan + '.min', '0')
+    if dirtyConfig or (not 'config' in args):
+        for chan in report['uncorrectable_total']:
+            print('uncorrected-total-ch' + chan + '.value', report['uncorrectable_total'][chan])
+
+    print('\nmultigraph wan_frequencies')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [09]: Frequency Assignments
+        graph_vlabel MHz
+        graph_category x-wan
+        graph_args --alt-autoscale""").format(report['model_name']))
+        for chan in report['downfreq']:
+            print('downfreq-ch' + chan + '.label', 'dn-ch' + report['downchannel'][chan])
+        for chan in report['upfreq']:
+            print(  'upfreq-ch' + chan + '.label', 'up-ch' + report[  'upchannel'][chan])
+    if dirtyConfig or (not 'config' in args):
+        for chan in report['downfreq']:
+            print('downfreq-ch' + chan + '.value', float(report['downfreq'][chan]) / 1000000)
+        for chan in report['upfreq']:
+            print(  'upfreq-ch' + chan + '.value', float(report[  'upfreq'][chan]) / 1000000)
+
+    print('\nmultigraph wan_uptime')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [10]: Uptime
+        graph_vlabel uptime in days
+        graph_category x-wan
+        graph_args --base 1000 --lower-limit 0
+        graph_scale no
+        uptime.label uptime
+        uptime.draw AREA""").format(report['model_name']))
+    if dirtyConfig or (not 'config' in args):
+        print('uptime.value', report['uptime_seconds'])
+
+    return True
+    # end main()
+
+
+def getStatusIntoReport():
+    global report
+
+    try:
+        page = requests.get(MODEM_STATUS_URL, timeout=25).text
+    except requests.exceptions.RequestException:
+        print("modem status page not responding", file=sys.stderr)
+        return False
+    page = page.translate(str.maketrans('','',"\n\x00\x09\r"))  # drop some nasty characters
+    soup = BeautifulSoup(str(page), 'html.parser')
+
+    model_name_tag = soup.find(id='thisModelNumberIs')
+    if model_name_tag:
+        report['model_name'] = model_name_tag.get_text()
+    else:
+        report['model_name'] = 'CableModem'
+
+    # Be sure WAN is connected, else do not report
+    td = soup.find('td', string="DOCSIS Network Access Enabled")
+    internetStatus = td.parent()[1].get_text()
+    if 'Allowed' not in internetStatus:
+        print("# Modem indicates no Internet Connection as of (local time):",
+              datetime.datetime.now().isoformat(), file=sys.stderr)
+        return False
+
+    if 'SB6183' in report['model_name']:
+        channel_id_col = 3
+        downfreq_col = 4
+        upfreq_col = 5
+        downpower_col = 5
+        uppower_col = 6
+        downsnr_col = 6
+        corrected_col = 7
+        uncorrectable_col = 8
+    if 'SB8200' in report['model_name']:
+        channel_id_col = 0
+        downfreq_col = 3
+        upfreq_col = 4
+        downpower_col = 4
+        uppower_col = 6
+        downsnr_col = 5
+        corrected_col = 6
+        uncorrectable_col = 7
+
+    # setup empty dict's for the incoming data rows
+    report['downsnr'] = {}
+    report['downpower'] = {}
+    report['uppower'] = {}
+    report['corrected_total'] = {}
+    report['uncorrectable_total'] = {}
+    report['downchannel'] = {}
+    report['upchannel'] = {}
+    report['downfreq'] = {}
+    report['upfreq'] = {}
+
+    # Gather the various data items from the tables...
+    block = soup.find('th', string="Downstream Bonded Channels").parent
+    block = block.next_sibling  # skip the 2 header rows
+    block = block.next_sibling
+    for row in block.next_siblings:
+        if isinstance(row, type(block)):
+            newRow = []
+            for column in row:  # grab all the row's numbers into a list
+                if isinstance(column, type(block)):
+                    newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
+
+            report['downchannel'][newRow[0]] = newRow[channel_id_col]
+            report['downpower'][newRow[0]] = newRow[downpower_col]
+            report['downsnr'][newRow[0]] = newRow[downsnr_col]
+            report['downfreq'][newRow[0]] = newRow[downfreq_col]
+
+            report['corrected_total'][newRow[0]] = newRow[corrected_col]
+            report['uncorrectable_total'][newRow[0]] = newRow[uncorrectable_col]
+
+    block = soup.find('th', string="Upstream Bonded Channels").parent
+    block = block.next_sibling  # skip the header rows
+    block = block.next_sibling
+    for row in block.next_siblings:
+        if isinstance(row, type(block)):
+            newRow = []
+            for column in row:
+                if isinstance(column, type(block)):
+                    newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
+            report['upchannel'][newRow[0]] = newRow[channel_id_col]
+            report['uppower'][newRow[0]] = newRow[uppower_col]
+            report['upfreq'][newRow[0]] = newRow[upfreq_col]
+
+    report['uppowerspread'] = max(float(i) for i in report['uppower'].values()) \
+        - min(float(i) for i in report['uppower'].values())
+    report['downpowerspread'] = max(float(i) for i in report['downpower'].values()) \
+        - min(float(i) for i in report['downpower'].values())
+    report['downsnrspread'] = max(float(i) for i in report['downsnr'].values()) \
+        - min(float(i) for i in report['downsnr'].values())
+    return True
+
+
+def getUptimeIntoReport():
+    global report
+
+    try:
+        page = requests.get(MODEM_UPTIME_URL, timeout=25).text
+    except requests.exceptions.RequestException:
+        print("modem uptime page not responding", file=sys.stderr)
+        return False
+    page = page.translate(str.maketrans('','',"\n\x00\x09\r"))  # drop some nasty characters
+    soup = BeautifulSoup(str(page), 'html.parser')  # this call takes a long time
+
+    block = soup.find('td', string="Up Time")
+    block = block.next_sibling  # skip the header rows
+    block = block.next_sibling
+    uptimeText = block.get_text()
+    uptimeElements = re.findall(r"\d+", uptimeText)
     uptime_seconds = \
           int(uptimeElements[0]) * 86400 \
         + int(uptimeElements[1]) * 3600 \
         + int(uptimeElements[2]) * 60 \
         + int(uptimeElements[3])
-    return str(float(uptime_seconds) / 86400.0)
+    # report as days, so divide by seconds/day
+    report['uptime_seconds'] = float(str(uptime_seconds)) / 86400.0
+    return True
 
 
-status_page_raw = parse_url("http://192.168.100.1")
-result = merge_result(status_page_raw)
-info_page_raw = parse_url("http://192.168.100.1/RgSwInfo.asp")
-result = merge_result(info_page_raw)
+    # expected return is that report['gateway'] and report'next_hop_latency'] exist
+def getNextHopLatency():
+    global report
+    report['gateway'] = ''
+    report['next_hop_latency'] = '0'
+    # issue the command to discover the gateway at the designated hop distance
+    cmd = LATENCY_GATEWAY_CMD \
+        + str(LATENCY_GATEWAY_HOPS) \
+        + " " \
+        + LATENCY_GATEWAY_HOST
+    try:
+        output = result = subprocess.run(cmd.split(' '), capture_output=True)
+    except subprocess.CalledProcessError:
+        return False
+    # parse the results for the IP addr of that hop
+    result = '0'
+    for line in output.stdout.decode("utf-8").split('\n'):
+        if line.startswith(' ' + str(LATENCY_GATEWAY_HOPS) + ' '):
+            result = line.split(' ')
+            if len(result) > 3:
+                result = result[3]
+            break
+    report['gateway'] = str(result)
+    # issue the command to measure latency to that hop
+    cmd = LATENCY_MEASURE_CMD + report['gateway'] # + " 2>/dev/null"
+    try:
+        output = result = subprocess.run(cmd.split(' '), capture_output=True)
+    except subprocess.CalledProcessError:
+        return False
+    # parse the results for the 4th field which is the average delay
+    result = '0'
+    for line in output.stdout.decode("utf-8").split('\n'):
+        if line.startswith('rtt'):
+            fields = line.split('/')
+            if len(fields) > 4:
+                result = fields[4]
+            break
+    # clip this value's peaks to spare graph messes when something's wrong
+    try:
+        if float(result) > 30.0:
+            result = str(30.0)
+    except ValueError:
+        result = '0'
+    report['next_hop_latency'] = str(result)
+    return True
 
-result['uptime'] = convertUptimeToDays(result['uptime'])
 
-try:
-    dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'  # has to exist and be '1'
-except KeyError:
-    dirtyConfig = False
+def loadFileIntoReport(aFile):
+    global report
+    try:
+        fhInput = open(aFile, 'r')
+        report.update(json.load(fhInput))
+        fhInput.close()
+        return True
+    except (FileNotFoundError, OSError, PermissionError, json.decoder.JSONDecodeError) as the_error:
+        print("# error reading", aFile, the_error, file=sys.stderr)
+        return False
 
-if 'config' in sys.argv:
-    print("multigraph arris_downsnr")
-    print("graph_title Arris", result['model'] or 'Modem', "[2] Downstream Signal to Noise (dB)")
-    print("graph_vlabel db (decibels)")
-    print("graph_category x-wan-arris")
-    print("graph_args --alt-autoscale --lower-limit 38")
-    # print("update_rate 60")
-    for key in sorted(result['downstream_channels']):
-        print("downsnr{0}.label Channel {1}".format(key, result['downstream_channels'][key]['channel_id']))
-        print("downsnr{0}.warning 33:".format(key))
-    print("")
 
-    print("multigraph arris_downfreq")
-    print("graph_title Arris", result['model'] or 'Modem', "[6] Downstream Channel frequency")
-    print("graph_vlabel MHz")
-    print("graph_category x-wan-arris")
-    # print("update_rate 60")
-    for key in sorted(result['downstream_channels']):
-        print("downfreq{0}.label Channel {1}".format(key, result['downstream_channels'][key]['channel_id']))
-    print("")
+def checkSpeedtestData(args):
+    global SPEEDTEST_JSON_FILE
 
-    print("multigraph arris_downpwr")
-    print("graph_title Arris", result['model'] or 'Modem', "[1] Downstream Power Level")
-    print("graph_vlabel dBmV")
-    print("graph_category x-wan-arris")
-    print("graph_args --alt-autoscale --lower-limit 4")
-    # print("update_rate 60")
-    for key in sorted(result['downstream_channels']):
-        print("downpwr{0}.label Channel {1}".format(key, result['downstream_channels'][key]['channel_id']))
-        print("downpwr{0}.warning -7:8".format(key))
-    print("")
+    try: # Use the munin-supplied folder location, or default for standalone
+        SPEEDTEST_JSON_FILE = os.environ['MUNIN_PLUGSTATE'] + '/' + SPEEDTEST_JSON_FILE
+    except KeyError:
+        SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + '/' + SPEEDTEST_JSON_FILE
 
-    print("multigraph arris_downcorrected")
-    print("graph_title Arris", result['model'] or 'Modem', "[3] Downstream Corrected Errors")
-    print("graph_vlabel Blocks per Minute")
-    print("graph_category x-wan-arris")
-    print("graph_scale no")
-    print("graph_period minute")
-    print("graph_args --upper-limit 33 --rigid")
-    # print("update_rate 60")
-    for key in sorted(result['downstream_channels']):
-        print("downcorrected{0}.label Channel {1}".format(key, result['downstream_channels'][key]['channel_id']))
-        print("downcorrected{0}.type DERIVE".format(key))
-        print("downcorrected{0}.min 0".format(key))
-    print("")
+    result = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+    currentTime = datetime.datetime.utcnow()
+    try:
+        priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
+        minutes_elapsed = (currentTime - priorTime) / datetime.timedelta(minutes=1)
+    except KeyError:
+        minutes_elapsed = SPEEDTEST_MAX_AGE + 1
+    # if it's too old, or recorded a slow test, generate a new one
+    if minutes_elapsed > SPEEDTEST_MAX_AGE or \
+        ((float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
+         or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD) \
+         and minutes_elapsed > 9): # wait ~10 minutes to retest, so the graph can better show the hiccup
+        if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
+            runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
+        result = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+    return result
 
-    print("multigraph arris_downuncorrected")
-    print("graph_title Arris", result['model'] or 'Modem', "[4] Downstream Uncorrected Errors")
-    print("graph_vlabel Blocks per Minute")
-    print("graph_category x-wan-arris")
-    print("graph_scale no")
-    print("graph_period minute")
-    print("graph_args --upper-limit 33 --rigid")
-    # print("update_rate 60")
-    for key in sorted(result['downstream_channels']):
-        print("downuncorrected{0}.label Channel {1}".format(key, result['downstream_channels'][key]['channel_id']))
-        print("downuncorrected{0}.type DERIVE".format(key))
-        print("downuncorrected{0}.min 0".format(key))
-    print("")
 
-    print("multigraph arris_uppwr")
-    print("graph_title Arris", result['model'] or 'Modem', "[5] Upstream Power")
-    print("graph_vlabel dBmV")
-    print("graph_category x-wan-arris")
-    print("graph_args --alt-autoscale --lower-limit 40 --upper-limit 48")
-    # print("update_rate 60")
-    for key in sorted(result['upstream_channels']):
-        print("uppwr{0}.label Channel {1}".format(key, result['upstream_channels'][key]['channel_id']))
-        print("uppwr{0}.warning 35:49".format(key))
-    print("")
+def runSpeedTest(output_json_file):
+    cmd = "/usr/bin/speedtest-cli --json"
 
-    print("multigraph arris_upfreq")
-    print("graph_title Arris", result['model'] or 'Modem', "[7] Upstream Frequency")
-    print("graph_vlabel MHz")
-    print("graph_category x-wan-arris")
-    # print("update_rate 60")
-    for key in sorted(result['upstream_channels']):
-        print("upfreq{0}.label Channel {1}".format(key, result['upstream_channels'][key]['channel_id']))
-    print("")
+    # ===== Inclusions ======
+    # cmd += "--server 14162"  # ND's server
+    # cmd += "--server 5025"  # ATT's Cicero, Il server
+    # cmd += "--server 5114"  # ATT's Detroit server
+    # cmd += "--server 5115"  # ATT's Indianapolis server
+    # cmd += "--server 1776"  # Comcast's Chicago server
 
-    print("multigraph arris_uptime")
-    print("graph_title Arris", result['model'] or 'Modem', "[8] Uptime")
-    print("graph_vlabel Days")
-    print("graph_category x-wan-arris")
-    print("graph_args --base 1000 --lower-limit 0")
-    print("graph_scale no")
-    # print("update_rate 60")
-    print("uptime.label Uptime")
-    print("uptime.draw AREA")
-    print("")
+    # ===== Exclusions ======
+    # cmd += "--exclude 16770"  # Fourway.net server; its upload speed varies weirdly
+    # cmd += "--exclude 14162"  # ND's server
 
-if dirtyConfig or 'config' not in sys.argv:
-    print("multigraph arris_downsnr")
-    for key in sorted(result['downstream_channels']):
-        item=result['downstream_channels'][key]
-        print("downsnr{0}.value {1}".format(key, item['snr_db'] or 'U'))
-    print("")
+    # cmd += "--no-download"  # for testing, reports download as 0
+    # cmd += "--version"  # for testing, does nothing
 
-    print("multigraph arris_downfreq")
-    for key in sorted(result['downstream_channels']):
-        item=result['downstream_channels'][key]
-        print("downfreq{0}.value {1}".format(key, item['frequency_mhz'] or 'U'))
-    print("")
+    try:
+        outFile = open(output_json_file, 'w')
+        result = subprocess.run(cmd.split(' '), stdout=outFile)
+        outFile.close()
+        return result.returncode == 0  # return a boolean
+    except (FileNotFoundError, OSError) as the_error:
+        print("# error creating:", output_json_file, the_error, file=sys.stderr)
 
-    print("multigraph arris_downpwr")
-    for key in sorted(result['downstream_channels']):
-        item=result['downstream_channels'][key]
-        print("downpwr{0}.value {1}".format(key, item['power_dbmv'] or 'U'))
-    print("")
 
-    print("multigraph arris_downcorrected")
-    for key in sorted(result['downstream_channels']):
-        item=result['downstream_channels'][key]
-        print("downcorrected{0}.value {1}".format(key, item['errors_corrected'] or 'U'))
-    print("")
-
-    print("multigraph arris_downuncorrected")
-    for key in sorted(result['downstream_channels']):
-        item=result['downstream_channels'][key]
-        print("downuncorrected{0}.value {1}".format(key, item['errors_uncorrectables'] or 'U'))
-    print("")
-
-    print("multigraph arris_uppwr")
-    for key in sorted(result['upstream_channels']):
-        item=result['upstream_channels'][key]
-        print("uppwr{0}.value {1}".format(key, item['power_dbmv'] or 'U'))
-    print("")
-
-    print("multigraph arris_upfreq")
-    for key in sorted(result['upstream_channels']):
-        item=result['upstream_channels'][key]
-        print("upfreq{0}.value {1}".format(key, item['frequency_mhz'] or 'U'))
-    print("")
-
-    print("multigraph arris_uptime")
-    print("uptime.value {0}".format(result['uptime']) or 'U')
-    print("")
-    sys.exit(0)
-
-sys.exit(1)
+if __name__ == '__main__':
+    import sys
+    try:
+        resultMain = main(sys.argv)
+    except (FileNotFoundError, OSError, json.decoder.JSONDecodeError) as the_error:
+        print("# error from main():", the_error, file=sys.stderr)
+        sys.exit(1)
+    sys.exit(0 if resultMain else 1)
