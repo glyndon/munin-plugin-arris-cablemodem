@@ -8,6 +8,9 @@
     Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
 
     TODO: try capping speedtest so it doesn't runaway if the speed stays low
+    TODO: add channel frequencies, so we can see if they get changed over time
+    TODO: experiment with other parsers that might be faster, and encodings of the input stream
+    TODO: change the name to something more indicative of its function
 """
 
 import datetime
