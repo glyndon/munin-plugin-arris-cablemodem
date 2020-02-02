@@ -1,7 +1,0 @@
-Differences between the SB6180 and SB8200 versions:
-
-1) Uptime URL: http://192.168.100.1/cmswinfo.html
-2) In Speedtest config: graph_args --base 1000 -l 0
-3) One extra .next_sibling in the parse for "Allowed" after finding "DOCSIS Network Access Enabled"
-4) There's no 'Channel ID' column for downstream, so change the index for downchannel to 0
-5) The columns with the data are 4,5,6,7 versus 5,6,7,8 on the 6180
