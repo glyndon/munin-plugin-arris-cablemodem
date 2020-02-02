@@ -3,6 +3,10 @@
 # MIT license
 # Modified for SB6183 by Glyndon, 2020/2/1
 
+# TODO: Add signal quality spresd, speedtest, and ping-latency graphs
+# TODO: Make all the external symbols match the wan-json code,
+#       so they can be used intrchangeablly
+
 import html.parser
 import os
 import re

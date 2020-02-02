@@ -200,8 +200,7 @@ def main(args):
         uptime.label uptime
         uptime.draw AREA"""))
     if dirtyConfig or (not 'config' in args):
-        # report as days, so divide by seconds/day
-        print('uptime.value', float(report['uptime_seconds']) / 86400.0)
+        print('uptime.value', report['uptime_seconds'])
 
     return True
     # end main()
@@ -290,11 +289,13 @@ def getUptimeIntoReport():
     block = block.next_sibling
     uptimeText = block.get_text()
     uptimeElements = re.findall(r"\d+", uptimeText)
-    uptime_seconds = int(uptimeElements[3]) \
-        + int(uptimeElements[2]) * 60 \
+    uptime_seconds = \
+          int(uptimeElements[0]) * 86400 \
         + int(uptimeElements[1]) * 3600 \
-        + int(uptimeElements[0]) * 86400
-    report['uptime_seconds'] = str(uptime_seconds)
+        + int(uptimeElements[2]) * 60 \
+        + int(uptimeElements[3])
+    # report as days, so divide by seconds/day
+    report['uptime_seconds'] = float(str(uptime_seconds)) / 86400.0
     return True
 
 
