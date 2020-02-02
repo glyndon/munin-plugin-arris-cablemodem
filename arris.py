@@ -9,9 +9,15 @@
     and the
     Arris SB8200 firmware: <tbd>
 
+<<<<<<< HEAD
     TODO: provide exponential backoff for speedtest, so it doesn't run too much if the speed stays low
     x TODO: add channel frequencies, so we can see if they get changed over time
     x TODO: change the name to something more indicative of its function
+=======
+    TODO: try capping speedtest so it doesn't runaway if the speed stays low
+    x TODO: add channel frequencies, so we can see if they get changed over time
+    TODO: change the name to something more indicative of its function
+>>>>>>> 5ab56b5365940895cf5a679ec7c3979bc74d4075
     x TODO: get model number and include it in the graph titles
     x TODO: use model number to set column numbers and URLs
     x TODO: experiment with other parsers that might be faster, and encodings of the input stream
