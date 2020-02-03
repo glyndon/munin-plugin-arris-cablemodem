@@ -2,19 +2,19 @@
 """
     Copyright 2017-2020 Gary Dobbins <gary@dobbinsonline.org>
 
-    A Munin 'multigraph' plugin that tracks cablemodem status
+    A Munin 'multigraph' plugin that tracks Arris cablemodem status and WAN performance
 
-    This version self-adjusts between the web interface of the
-    Arris SB6183 firmware: D30CM-OSPREY-2.4.0.1-GA-02-NOSH
+    This version self-adjusts between the web interfaces of the
+    Arris SB6183; tested on firmware D30CM-OSPREY-2.4.0.1-GA-02-NOSH
     and the
-    Arris SB8200 firmware: <tbd>
+    Arris SB8200; tested on firmware SB8200.0200.174F.311915.NSH.RT.NA
 
     TODO: provide exponential backoff for speedtest, so it doesn't run too much if the speed stays low
     x TODO: add channel frequencies, so we can see if they get changed over time
-    x TODO: change the name to something more indicative of its function
+    x TODO: change the name to something more indicative of its focus
     x TODO: get model number and include it in the graph titles
-    x TODO: use model number to set column numbers and URLs
-    x TODO: experiment with other parsers that might be faster, and encodings of the input stream
+    x TODO: use model number to select column numbers and URLs
+    x TODO: experiment with other parsers and encodings of the input stream, select parser
 """
 
 import datetime
@@ -42,14 +42,14 @@ LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 report = {}
 
 def main(args):
-    global report, SPEEDTEST_JSON_FILE, MODEM_UPTIME_URL
+    global report, MODEM_UPTIME_URL
 
     try:
         dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'  # has to exist and be '1'
     except KeyError:
         dirtyConfig = False
 
-    if not getStatusIntoReport():  # this call also sets the URL for the uptime page
+    if not getStatusIntoReport():  # this call also sets report['model_name']
         return False
 
     if 'SB6183' in report['model_name']:
