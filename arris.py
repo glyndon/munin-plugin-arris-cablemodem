@@ -9,12 +9,14 @@
     and the
     Arris SB8200; tested on firmware SB8200.0200.174F.311915.NSH.RT.NA
 
-    TODO: provide exponential backoff for speedtest, so it doesn't run too much if the speed stays low
+    TODO: (needed?) incorporate backoff logic for speedtest, so it doesn't run too much if the speed stays low
     x TODO: add channel frequencies, so we can see if they get changed over time
     x TODO: change the name to something more indicative of its focus
     x TODO: get model number and include it in the graph titles
     x TODO: use model number to select column numbers and URLs
     x TODO: experiment with other parsers and encodings of the input stream, select parser
+
+    Clearly to any Python expert I have a ways to go becoming a good Py programmer. I still try to write C.
 """
 
 import datetime
@@ -33,7 +35,6 @@ SPEEDTEST_MAX_AGE = 54
 SPEEDTEST_RETEST_DOWNLOAD = 25000000
 SPEEDTEST_RETEST_UPLOAD = 1000000
 MODEM_STATUS_URL = 'http://192.168.100.1/' # All Arris modems start here
-MODEM_UPTIME_URL = '' # gets set based on model number
 LATENCY_GATEWAY_HOST = '8.8.4.4'
 LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
 LATENCY_GATEWAY_HOPS = 3
@@ -42,22 +43,23 @@ LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 report = {}
 
 def main(args):
-    global report, MODEM_UPTIME_URL
+    global report
 
     try:
         dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'  # has to exist and be '1'
     except KeyError:
         dirtyConfig = False
 
-    if not getStatusIntoReport():  # this call also sets report['model_name']
+    if not getStatusIntoReport(MODEM_STATUS_URL):  # this call also sets report['model_name']
         return False
 
+    modem_uptime_url = ''
     if 'SB6183' in report['model_name']:
-        MODEM_UPTIME_URL = 'http://192.168.100.1/RgSwInfo.asp'
+        modem_uptime_url = 'http://192.168.100.1/RgSwInfo.asp'
     if 'SB8200' in report['model_name']:
-        MODEM_UPTIME_URL = 'http://192.168.100.1/cmswinfo.html'
+        modem_uptime_url = 'http://192.168.100.1/cmswinfo.html'
 
-    if not getUptimeIntoReport():  # also a handy check to see if the modem is responding
+    if not getModemUptime(modem_uptime_url):  # this page's URL varies by modem model
         return False
 
     latencyValid = getNextHopLatency()
@@ -117,7 +119,7 @@ def main(args):
         graph_category x-wan
         graph_args --alt-autoscale --lower-limit 4""").format(report['model_name']))
         for chan in report['downpower']:
-            print('down-power-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
+            print('down-power-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
         for chan in report['downpower']:
             print('down-power-ch' + chan + '.value', report['downpower'][chan])
@@ -130,7 +132,7 @@ def main(args):
         graph_category x-wan
         graph_args --alt-autoscale --lower-limit 38""").format(report['model_name']))
         for chan in report['downsnr']:
-            print('down-snr-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
+            print('down-snr-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.value', report['downsnr'][chan])
@@ -143,7 +145,7 @@ def main(args):
         graph_category x-wan
         graph_args --alt-autoscale --lower-limit 40 --upper-limit 48""").format(report['model_name']))
         for chan in report['uppower']:
-            print('up-power-ch' + chan + '.label', 'ch' + report['upchannel'][chan])
+            print('up-power-ch' + chan + '.label', 'ch' + report['upchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
         for chan in report['uppower']:
             print('up-power-ch' + chan + '.value', report['uppower'][chan])
@@ -174,7 +176,7 @@ def main(args):
         graph_period minute
         graph_scale no""").format(report['model_name']))
         for chan in report['corrected_total']:
-            print('corrected-total-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
+            print('corrected-total-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
             print('corrected-total-ch' + chan + '.type', 'DERIVE')
             print('corrected-total-ch' + chan + '.min', '0')
     if dirtyConfig or (not 'config' in args):
@@ -191,7 +193,7 @@ def main(args):
         graph_period minute
         graph_scale no""").format(report['model_name']))
         for chan in report['uncorrectable_total']:
-            print('uncorrected-total-ch' + chan + '.label', 'ch' + report['downchannel'][chan])
+            print('uncorrected-total-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
             print('uncorrected-total-ch' + chan + '.type', 'DERIVE')
             print('uncorrected-total-ch' + chan + '.min', '0')
     if dirtyConfig or (not 'config' in args):
@@ -206,9 +208,9 @@ def main(args):
         graph_category x-wan
         graph_args --alt-autoscale""").format(report['model_name']))
         for chan in report['downfreq']:
-            print('downfreq-ch' + chan + '.label', 'dn-ch' + report['downchannel'][chan])
+            print('downfreq-ch' + chan + '.label', 'dn-ch' + report['downchan_id'][chan])
         for chan in report['upfreq']:
-            print(  'upfreq-ch' + chan + '.label', 'up-ch' + report[  'upchannel'][chan])
+            print(  'upfreq-ch' + chan + '.label', 'up-ch' + report[  'upchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
         for chan in report['downfreq']:
             print('downfreq-ch' + chan + '.value', float(report['downfreq'][chan]) / 1000000)
@@ -232,11 +234,11 @@ def main(args):
     # end main()
 
 
-def getStatusIntoReport():
+def getStatusIntoReport(url):
     global report
 
     try:
-        page = requests.get(MODEM_STATUS_URL, timeout=25).text
+        page = requests.get(url, timeout=25).text
     except requests.exceptions.RequestException:
         print("modem status page not responding", file=sys.stderr)
         return False
@@ -282,8 +284,8 @@ def getStatusIntoReport():
     report['uppower'] = {}
     report['corrected_total'] = {}
     report['uncorrectable_total'] = {}
-    report['downchannel'] = {}
-    report['upchannel'] = {}
+    report['downchan_id'] = {}
+    report['upchan_id'] = {}
     report['downfreq'] = {}
     report['upfreq'] = {}
 
@@ -298,7 +300,7 @@ def getStatusIntoReport():
                 if isinstance(column, type(block)):
                     newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
 
-            report['downchannel'][newRow[0]] = newRow[channel_id_col]
+            report['downchan_id'][newRow[0]] = newRow[channel_id_col]
             report['downpower'][newRow[0]] = newRow[downpower_col]
             report['downsnr'][newRow[0]] = newRow[downsnr_col]
             report['downfreq'][newRow[0]] = newRow[downfreq_col]
@@ -315,7 +317,7 @@ def getStatusIntoReport():
             for column in row:
                 if isinstance(column, type(block)):
                     newRow.append(re.sub("[^0-9.-]", "", column.get_text()))
-            report['upchannel'][newRow[0]] = newRow[channel_id_col]
+            report['upchan_id'][newRow[0]] = newRow[channel_id_col]
             report['uppower'][newRow[0]] = newRow[uppower_col]
             report['upfreq'][newRow[0]] = newRow[upfreq_col]
 
@@ -328,11 +330,11 @@ def getStatusIntoReport():
     return True
 
 
-def getUptimeIntoReport():
+def getModemUptime(url):
     global report
 
     try:
-        page = requests.get(MODEM_UPTIME_URL, timeout=25).text
+        page = requests.get(url, timeout=25).text
     except requests.exceptions.RequestException:
         print("modem uptime page not responding", file=sys.stderr)
         return False
