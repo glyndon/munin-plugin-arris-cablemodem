@@ -249,7 +249,9 @@ def getStatusIntoReport(url):
     if model_name_tag:
         report['model_name'] = model_name_tag.get_text()
     else:
-        report['model_name'] = 'CableModem'
+        # report['model_name'] = 'CableModem'
+        # If no model # known, we can't continue very well
+        return False
 
     # Be sure WAN is connected, else do not report
     td = soup.find('td', string="DOCSIS Network Access Enabled")
@@ -259,6 +261,7 @@ def getStatusIntoReport(url):
               datetime.datetime.now().isoformat(), file=sys.stderr)
         return False
 
+    # the columnar position of these stats vary between models of modem (why? - seems silly)
     if 'SB6183' in report['model_name']:
         channel_id_col = 3
         downfreq_col = 4
