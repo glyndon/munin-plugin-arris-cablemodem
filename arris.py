@@ -37,7 +37,7 @@ SPEEDTEST_RETEST_UPLOAD = 1000000
 MODEM_STATUS_URL = 'http://192.168.100.1/' # All Arris modems start here
 LATENCY_GATEWAY_HOST = '8.8.4.4'
 LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
-LATENCY_GATEWAY_HOPS = 3
+LATENCY_GATEWAY_HOPS = 2
 LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 
 report = {}
@@ -248,9 +248,7 @@ def getStatusIntoReport(url):
     model_name_tag = soup.find(id='thisModelNumberIs')
     if model_name_tag:
         report['model_name'] = model_name_tag.get_text()
-    else:
-        # report['model_name'] = 'CableModem'
-        # If no model # known, we can't continue very well
+    else:  # If no model # known, we can't continue very well
         return False
 
     # Be sure WAN is connected, else do not report
