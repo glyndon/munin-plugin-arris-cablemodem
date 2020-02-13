@@ -15,4 +15,4 @@ After experimenting with other HTML parsers, I found some tricks that better-tol
 If folks send some files scraped from other models, I'll see about incorporating them, too.
 (use 'curl 192.168.100.1 -o status.html' to capture, and also do so for the modem's page that has uptime - they seem to use different URLs by model.)
 
-The 'bradh352-arris' file is an adaptation of a version forked from  bradh352's version (munin-plugins), and now heavily altered to bring it up-to-date, and to incorporate some features I've found useful.
+The 'bradh352-arris' file is an alternative version that is forked from  bradh352's version (munin-plugins), and here heavily altered to bring it up-to-date, and to incorporate some features I've found useful. It's not likely I'll spend more time on this variant, as I've incorporated its SB8200 support into the main code: arris.py
