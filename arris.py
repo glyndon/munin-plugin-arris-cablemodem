@@ -108,7 +108,7 @@ def main(args):
         latency.colour cc2900
         latency.label Latency for """).format(report['model_name']), end="")
         print(LATENCY_GATEWAY_HOPS, "hops")
-        print('latency.min 7')  # an artificial and arbitrary floor, so the graph never spikes to zero
+        # print('latency.min 7')  # an artificial and arbitrary floor, so the graph never spikes to zero
     if (dirtyConfig or (not 'config' in args)) and latencyValid:
         print('latency.value', report['next_hop_latency'])
 
