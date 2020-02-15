@@ -401,6 +401,8 @@ def getNextHopLatency():
             result = str(30.0)
     except ValueError:
         result = ''
+    if result is '':
+        return False
     report['next_hop_latency'] = str(result)
     return True
 
