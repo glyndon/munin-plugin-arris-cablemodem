@@ -361,18 +361,18 @@ def getModemUptime(url):
 def getNextHopLatency():
     global report
     report['gateway'] = ''
-    report['next_hop_latency'] = '0'
+    report['next_hop_latency'] = ''
     # issue the command to discover the gateway at the designated hop distance
     cmd = LATENCY_GATEWAY_CMD \
         + str(LATENCY_GATEWAY_HOPS) \
         + " " \
         + LATENCY_GATEWAY_HOST
     try:
-        output = result = subprocess.run(cmd.split(' '), capture_output=True)
+        output = subprocess.run(cmd.split(' '), capture_output=True)
     except subprocess.CalledProcessError:
         return False
     # parse the results for the IP addr of that hop
-    result = '0'
+    result = ''
     for line in output.stdout.decode("utf-8").split('\n'):
         if line.startswith(' ' + str(LATENCY_GATEWAY_HOPS) + ' '):
             result = line.split(' ')
@@ -387,7 +387,7 @@ def getNextHopLatency():
     except subprocess.CalledProcessError:
         return False
     # parse the results for the 4th field which is the average delay
-    result = '0'
+    result = ''
     for line in output.stdout.decode("utf-8").split('\n'):
         if line.startswith('rtt'):
             fields = line.split('/')
@@ -399,7 +399,7 @@ def getNextHopLatency():
         if float(result) > 30.0:
             result = str(30.0)
     except ValueError:
-        result = '0'
+        result = ''
     report['next_hop_latency'] = str(result)
     return True
 
