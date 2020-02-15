@@ -1,5 +1,7 @@
 # munin-plugin-arris-cablemodem
-Munin plugin(s) that will report the data available from an Arris cablemodem's web interface
+Munin plugin(s) that will report the data available from an Arris cablemodem's web interface.
+Currently supports certain versions of SB6183 and SB8200.
+(If you have another model, see below.)
 
 To install:
 1) Be sure the speedtest-cli package is installed for your OS
