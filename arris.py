@@ -10,11 +10,6 @@
     Arris SB8200; tested on firmware SB8200.0200.174F.311915.NSH.RT.NA
 
     TODO: (needed?) incorporate backoff logic for speedtest, so it doesn't run too much if the speed stays low
-    x TODO: add channel frequencies, so we can see if they get changed over time
-    x TODO: change the name to something more indicative of its focus
-    x TODO: get model number and include it in the graph titles
-    x TODO: use model number to select column numbers and URLs
-    x TODO: experiment with other parsers and encodings of the input stream, select parser
 
     Clearly to any Python expert I have a ways to go becoming a good Py programmer. I still try to write C.
 """
