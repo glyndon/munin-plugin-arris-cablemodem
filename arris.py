@@ -58,7 +58,7 @@ def main(args):
     latencyValid = getNextHopLatency()
 
     # See if the stored speed data exists or is in need of updating
-    speedTestFileExists = checkSpeedtestData(args)
+    speedTestDataExist = checkSpeedtestData(args)
 
     # ==== report emission starts here ====
 
@@ -82,7 +82,7 @@ def main(args):
         print(textwrap.dedent("""\
         distance.colour aaaaaa
         graph_info Graph of Internet Connection Speed"""))
-    if (dirtyConfig or (not 'config' in args)) and  speedTestFileExists:
+    if (dirtyConfig or (not 'config' in args)) and  speedTestDataExist:
         downloadspeed = float(report['download'] / 1000000)
         uploadspeed = float(report['upload'] / 1000000)
         # fiddle with the miles so the lines on the graph don't coincide/vary as much
@@ -204,12 +204,12 @@ def main(args):
         for chan in report['downfreq']:
             print('downfreq-ch' + chan + '.label', 'dn-ch' + report['downchan_id'][chan])
         for chan in report['upfreq']:
-            print(  'upfreq-ch' + chan + '.label', 'up-ch' + report[  'upchan_id'][chan])
+            print('upfreq-ch' + chan + '.label', 'up-ch' + report['upchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
         for chan in report['downfreq']:
             print('downfreq-ch' + chan + '.value', float(report['downfreq'][chan]) / 1000000)
         for chan in report['upfreq']:
-            print(  'upfreq-ch' + chan + '.value', float(report[  'upfreq'][chan]) / 1000000)
+            print('upfreq-ch' + chan + '.value', float(report['upfreq'][chan]) / 1000000)
 
     print('\nmultigraph wan_uptime')
     if 'config' in args:
@@ -236,7 +236,7 @@ def getStatusIntoReport(url):
     except requests.exceptions.RequestException:
         print("modem status page not responding", file=sys.stderr)
         return False
-    page = page.translate(str.maketrans('','',"\n\x00\x09\r"))  # drop some nasty characters
+    page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
     soup = BeautifulSoup(str(page), 'html.parser')
 
     model_name_tag = soup.find(id='thisModelNumberIs')
@@ -333,7 +333,7 @@ def getModemUptime(url):
     except requests.exceptions.RequestException:
         print("modem uptime page not responding", file=sys.stderr)
         return False
-    page = page.translate(str.maketrans('','',"\n\x00\x09\r"))  # drop some nasty characters
+    page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
     soup = BeautifulSoup(str(page), 'html.parser')  # this call takes a long time
 
     block = soup.find('td', string="Up Time")
