@@ -62,6 +62,7 @@ def main(args):
 
     # ==== report emission starts here ====
 
+    testTime = datetime.datetime.fromisoformat(report['speedtest']['timestamp'][:-1])
     print('\nmultigraph wan_speedtest')
     if 'config' in args:
         print(textwrap.dedent("""\
@@ -81,7 +82,7 @@ def main(args):
             print('server')
         print(textwrap.dedent("""\
         distance.colour aaaaaa
-        graph_info Graph of Internet Connection Speed"""))
+        graph_info Graph of Internet Connection Speed @UTC {}""").format(testTime.strftime('%x %X')))
     if (dirtyConfig or (not 'config' in args)) and  speedTestDataExist:
         downloadspeed = float(report['speedtest']['download'] / 1000000)
         uploadspeed = float(report['speedtest']['upload'] / 1000000)
