@@ -76,17 +76,17 @@ def main(args):
         up.colour 44aa99
         distance.label Dist. to """).format(report['model_name']), end="")
         try:
-            print(report['server']['sponsor'])
+            print(report['speedtest']['server']['sponsor'])
         except KeyError:
             print('server')
         print(textwrap.dedent("""\
         distance.colour aaaaaa
         graph_info Graph of Internet Connection Speed"""))
     if (dirtyConfig or (not 'config' in args)) and  speedTestDataExist:
-        downloadspeed = float(report['download'] / 1000000)
-        uploadspeed = float(report['upload'] / 1000000)
+        downloadspeed = float(report['speedtest']['download'] / 1000000)
+        uploadspeed = float(report['speedtest']['upload'] / 1000000)
         # fiddle with the miles so the lines on the graph don't coincide/vary as much
-        distance = math.log(max(1, float(report['server']['d']) - 3)) + 10
+        distance = math.log(max(1, float(report['speedtest']['server']['d']) - 3)) + 10
         print('down.value', downloadspeed)
         print('up.value', uploadspeed)
         print('distance.value', distance)
@@ -402,9 +402,10 @@ def getNextHopLatency():
 
 def loadFileIntoReport(aFile):
     global report
+    report['speedtest'] = {}
     try:
         fhInput = open(aFile, 'r')
-        report.update(json.load(fhInput))
+        report['speedtest'].update(json.load(fhInput))
         fhInput.close()
         return True
     except (FileNotFoundError, OSError, PermissionError, json.decoder.JSONDecodeError) as the_error:
@@ -423,14 +424,14 @@ def checkSpeedtestData(args):
     result = loadFileIntoReport(SPEEDTEST_JSON_FILE)
     currentTime = datetime.datetime.utcnow()
     try:
-        priorTime = datetime.datetime.fromisoformat(report['timestamp'][:-1])
+        priorTime = datetime.datetime.fromisoformat(report['speedtest']['timestamp'][:-1])
         minutes_elapsed = (currentTime - priorTime) / datetime.timedelta(minutes=1)
     except KeyError:
         minutes_elapsed = SPEEDTEST_MAX_AGE + 1
     # if it's too old, or recorded a slow test, generate a new one
     if minutes_elapsed > SPEEDTEST_MAX_AGE or \
-        ((float(report['download']) < SPEEDTEST_RETEST_DOWNLOAD \
-         or float(report['upload']) < SPEEDTEST_RETEST_UPLOAD) \
+        ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD \
+         or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD) \
          and minutes_elapsed > 9): # wait ~10 minutes to retest, so the graph can better show the hiccup
         if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
             runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
