@@ -400,7 +400,7 @@ def getNextHopLatency():
     return True
 
 
-def loadFileIntoReport(aFile):
+def loadSpeedtestFileIntoReport(aFile):
     global report
     report['speedtest'] = {}
     try:
@@ -421,7 +421,7 @@ def checkSpeedtestData(args):
     except KeyError:
         SPEEDTEST_JSON_FILE = STATEFUL_FILE_DIR_DEFAULT + '/' + SPEEDTEST_JSON_FILE
 
-    result = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+    result = loadSpeedtestFileIntoReport(SPEEDTEST_JSON_FILE)
     currentTime = datetime.datetime.utcnow()
     try:
         priorTime = datetime.datetime.fromisoformat(report['speedtest']['timestamp'][:-1])
@@ -435,7 +435,7 @@ def checkSpeedtestData(args):
          and minutes_elapsed > 9): # wait ~10 minutes to retest, so the graph can better show the hiccup
         if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
             runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
-        result = loadFileIntoReport(SPEEDTEST_JSON_FILE)
+        result = loadSpeedtestFileIntoReport(SPEEDTEST_JSON_FILE)
     return result
 
 
