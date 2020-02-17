@@ -10,8 +10,6 @@
     Arris SB8200; tested on firmware SB8200.0200.174F.311915.NSH.RT.NA
 
     TODO: (needed?) incorporate backoff logic for speedtest, so it doesn't run too much if the speed stays low
-
-    Clearly to any Python expert I have a ways to go becoming a good Py programmer. I still fallback to C style.
 """
 
 import datetime
