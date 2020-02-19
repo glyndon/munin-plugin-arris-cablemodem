@@ -67,10 +67,7 @@ def main(args):
 
     if not getModemUptime(modem_uptime_url):  # this page's URL varies by modem model
         return False
-
     latencyValid = getNextHopLatency()
-
-    # See if the stored speed data exists or is in need of updating
     speedTestDataExist = checkSpeedtestData(args)
 
     # ==== report emission starts here ====
@@ -88,7 +85,8 @@ def main(args):
         down.colour 0066cc
         up.label Upload
         up.colour 44aa99
-        distance.label Dist. to """).format(report['model_name']), end="")
+        distance.label Dist. to 
+        """).format(report['model_name']), end="")
         try:
             print(report['speedtest']['server']['sponsor'])
         except KeyError:
@@ -113,7 +111,8 @@ def main(args):
         graph_category x-wan
         graph_args --alt-autoscale --upper-limit 33 --lower-limit 0 --rigid --allow-shrink
         latency.colour cc2900
-        latency.label Latency for """).format(report['model_name']), end="")
+        latency.label Latency for
+        """).format(report['model_name']), end="")
         print(LATENCY_GATEWAY_HOPS, "hops")
         # print('latency.min 7')  # an artificial and arbitrary floor, so the graph never spikes to zero
     if (dirtyConfig or (not 'config' in args)) and latencyValid:
@@ -138,7 +137,8 @@ def main(args):
         graph_title {} [04]: Downstream SNR
         graph_vlabel dB
         graph_category x-wan
-        graph_args --alt-autoscale --lower-limit 38""").format(report['model_name']))
+        graph_args --alt-autoscale --lower-limit 38
+        """).format(report['model_name']), end='')
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
@@ -151,7 +151,8 @@ def main(args):
         graph_title {} [07]: Upstream Power
         graph_vlabel dB
         graph_category x-wan
-        graph_args --alt-autoscale --lower-limit 40 --upper-limit 48""").format(report['model_name']))
+        graph_args --alt-autoscale --lower-limit 40 --upper-limit 48
+        """).format(report['model_name']), end='')
         for chan in report['uppower']:
             print('up-power-ch' + chan + '.label', 'ch' + report['upchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
@@ -168,7 +169,8 @@ def main(args):
         graph_scale no
         downpowerspread.label Downstream Power spread
         downsnrspread.label Downstream SNR spread
-        uppowerspread.label Upstream Power spread""").format(report['model_name']))
+        uppowerspread.label Upstream Power spread
+        """).format(report['model_name']), end='')
     if dirtyConfig or (not 'config' in args):
         print('downpowerspread.value', report['downpowerspread'])
         print('downsnrspread.value', report['downsnrspread'])
@@ -182,7 +184,8 @@ def main(args):
         graph_category x-wan
         graph_args --upper-limit 33 --rigid
         graph_period minute
-        graph_scale no""").format(report['model_name']))
+        graph_scale no
+        """).format(report['model_name']), end='')
         for chan in report['corrected_total']:
             print('corrected-total-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
             print('corrected-total-ch' + chan + '.type', 'DERIVE')
@@ -199,7 +202,8 @@ def main(args):
         graph_category x-wan
         graph_args --upper-limit 33 --rigid
         graph_period minute
-        graph_scale no""").format(report['model_name']))
+        graph_scale no
+        """).format(report['model_name']), end='')
         for chan in report['uncorrectable_total']:
             print('uncorrected-total-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
             print('uncorrected-total-ch' + chan + '.type', 'DERIVE')
@@ -214,7 +218,8 @@ def main(args):
         graph_title {} [09]: Frequency Assignments
         graph_vlabel MHz
         graph_category x-wan
-        graph_args --alt-autoscale""").format(report['model_name']))
+        graph_args --alt-autoscale
+        """).format(report['model_name']), end='')
         for chan in report['downfreq']:
             print('downfreq-ch' + chan + '.label', 'dn-ch' + report['downchan_id'][chan])
         for chan in report['upfreq']:
@@ -234,7 +239,8 @@ def main(args):
         graph_args --base 1000 --lower-limit 0
         graph_scale no
         uptime.label uptime
-        uptime.draw AREA""").format(report['model_name']))
+        uptime.draw AREA
+        """).format(report['model_name']), end='')
     if dirtyConfig or (not 'config' in args):
         print('uptime.value', report['uptime_seconds'])
 
