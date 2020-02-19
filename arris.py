@@ -32,6 +32,21 @@ LATENCY_GATEWAY_HOST = '8.8.4.4'
 LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
 LATENCY_GATEWAY_HOPS = 2
 LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
+SPEEDTEST_CMD = "/usr/bin/speedtest-cli --json"
+# ===== Inclusions ======
+# SPEEDTEST_CMD += "--server 14162"  # ND's server
+# SPEEDTEST_CMD += "--server 5025"  # ATT's Cicero, Il server
+# SPEEDTEST_CMD += "--server 5114"  # ATT's Detroit server
+# SPEEDTEST_CMD += "--server 5115"  # ATT's Indianapolis server
+# SPEEDTEST_CMD += "--server 1776"  # Comcast's Chicago server
+
+# ===== Exclusions ======
+# SPEEDTEST_CMD += "--exclude 16770"  # Fourway.net server; its upload speed varies weirdly
+# SPEEDTEST_CMD += "--exclude 14162"  # ND's server
+
+# SPEEDTEST_CMD += "--no-download"  # for testing, reports download as 0
+# SPEEDTEST_CMD += "--version"  # for testing, does nothing
+
 
 report = {}
 
@@ -434,32 +449,18 @@ def checkSpeedtestData(args):
         ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD \
          or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD) \
          and minutes_elapsed > 9): # wait ~10 minutes to retest, so the graph can better show the hiccup
-        if not 'nospeedtest' in args: # to facilitate testing w/o running an actual test
-            runSpeedTest(SPEEDTEST_JSON_FILE)  # then reload our dictionary from the new file
+        if not 'nospeedtest' in args: # for testing this code w/o running an actual speedtest
+            runSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)  # then reload our dictionary from the new file
+        else:
+            print('# would have run:', SPEEDTEST_CMD, file=sys.stderr)
         result = loadSpeedtestFileIntoReport(SPEEDTEST_JSON_FILE)
     return result
 
 
-def runSpeedTest(output_json_file):
-    cmd = "/usr/bin/speedtest-cli --json"
-
-    # ===== Inclusions ======
-    # cmd += "--server 14162"  # ND's server
-    # cmd += "--server 5025"  # ATT's Cicero, Il server
-    # cmd += "--server 5114"  # ATT's Detroit server
-    # cmd += "--server 5115"  # ATT's Indianapolis server
-    # cmd += "--server 1776"  # Comcast's Chicago server
-
-    # ===== Exclusions ======
-    # cmd += "--exclude 16770"  # Fourway.net server; its upload speed varies weirdly
-    # cmd += "--exclude 14162"  # ND's server
-
-    # cmd += "--no-download"  # for testing, reports download as 0
-    # cmd += "--version"  # for testing, does nothing
-
+def runSpeedTest(output_json_file, speedtest_cmd):
     try:
         outFile = open(output_json_file, 'w')
-        result = subprocess.run(cmd.split(' '), stdout=outFile)
+        result = subprocess.run(speedtest_cmd.split(' '), stdout=outFile)
         outFile.close()
         return result.returncode == 0  # return a boolean
     except (FileNotFoundError, OSError) as the_error:
