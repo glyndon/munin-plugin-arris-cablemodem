@@ -40,11 +40,10 @@ SPEEDTEST_CMD = "/usr/bin/speedtest-cli --json"
 # SPEEDTEST_CMD += "--server 5114"  # ATT's Detroit server
 # SPEEDTEST_CMD += "--server 5115"  # ATT's Indianapolis server
 # SPEEDTEST_CMD += "--server 1776"  # Comcast's Chicago server
-
 # ===== Exclusions ======
 # SPEEDTEST_CMD += "--exclude 16770"  # Fourway.net server; its upload speed varies weirdly
 # SPEEDTEST_CMD += "--exclude 14162"  # ND's server
-
+# ===== Test modes ======
 # SPEEDTEST_CMD += "--no-download"  # for testing, reports download as 0
 # SPEEDTEST_CMD += "--version"  # for testing, does nothing
 
