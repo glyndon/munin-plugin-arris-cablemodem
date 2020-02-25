@@ -49,7 +49,12 @@ SPEEDTEST_CMD = "/usr/bin/speedtest-cli --json"
 
 
 def main(args):
-    global report
+    global report, MODEM_STATUS_URL
+
+    try:
+        MODEM_STATUS_URL = os.environ['MODEM_STATUS_URL']  # for testing against a file copy of the HTML
+    except KeyError:
+        pass
 
     try:
         dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'  # has to exist and be '1'
@@ -65,9 +70,13 @@ def main(args):
     if 'SB8200' in report['model_name']:
         modem_uptime_url = 'http://192.168.100.1/cmswinfo.html'
 
-    if not getModemUptime(modem_uptime_url):  # this page's URL varies by modem model
-        return False
-    latencyValid = getNextHopLatency()
+    if 'http' in MODEM_STATUS_URL:
+        if not getModemUptime(modem_uptime_url):  # this page's URL varies by modem model
+            return False
+        latencyValid = getNextHopLatency()
+    else:
+        latencyValid = False
+        report['uptime_seconds'] = 0
     speedTestDataExist = checkSpeedtestData(args)
 
     # ==== report emission starts here ====
@@ -251,11 +260,20 @@ def main(args):
 def getStatusIntoReport(url):
     global report
 
-    try:
-        page = requests.get(url, timeout=25).text
-    except requests.exceptions.RequestException:
-        print("modem status page not responding", file=sys.stderr)
-        return False
+    if 'http' in MODEM_STATUS_URL:
+        try:
+            page = requests.get(url, timeout=25).text
+        except requests.exceptions.RequestException:
+            print("modem status page not responding", file=sys.stderr)
+            return False
+    else:
+        try:
+            fh = open(MODEM_STATUS_URL, 'r')
+            page = fh.read()
+            fh.close()
+        except:
+            print("modem status-file read failure", file=sys.stderr)
+            return False
     page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
     soup = BeautifulSoup(str(page), 'html.parser')
 
