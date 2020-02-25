@@ -51,8 +51,8 @@ SPEEDTEST_CMD = "/usr/bin/speedtest-cli --json"
 def main(args):
     global report, MODEM_STATUS_URL
 
-    try:
-        MODEM_STATUS_URL = os.environ['MODEM_STATUS_URL']  # for testing against a file copy of the HTML
+    try:  # for testing against a file copy of the HTML
+        MODEM_STATUS_URL = os.environ['MODEM_STATUS_URL']
     except KeyError:
         pass
 
@@ -77,6 +77,7 @@ def main(args):
     else:
         latencyValid = False
         report['uptime_seconds'] = 0
+
     speedTestDataExist = checkSpeedtestData(args)
 
     # ==== report emission starts here ====
@@ -94,8 +95,7 @@ def main(args):
         down.colour 0066cc
         up.label Upload
         up.colour 44aa99
-        distance.label Dist. to 
-        """).format(report['model_name']), end="")
+        distance.label Dist. to """).format(report['model_name']), end="")
         try:
             print(report['speedtest']['server']['sponsor'])
         except KeyError:
@@ -120,8 +120,7 @@ def main(args):
         graph_category x-wan
         graph_args --alt-autoscale --upper-limit 33 --lower-limit 0 --rigid --allow-shrink
         latency.colour cc2900
-        latency.label Latency for
-        """).format(report['model_name']), end="")
+        latency.label Latency for """).format(report['model_name']), end="")
         print(LATENCY_GATEWAY_HOPS, "hops")
         # print('latency.min 7')  # an artificial and arbitrary floor, so the graph never spikes to zero
     if (dirtyConfig or (not 'config' in args)) and latencyValid:
@@ -275,7 +274,7 @@ def getStatusIntoReport(url):
             print("modem status-file read failure", file=sys.stderr)
             return False
     page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
-    soup = BeautifulSoup(str(page), 'html.parser')
+    soup = BeautifulSoup(str(page), 'html5lib')
 
     model_name_tag = soup.find(id='thisModelNumberIs')
     if model_name_tag:
@@ -372,7 +371,7 @@ def getModemUptime(url):
         print("modem uptime page not responding", file=sys.stderr)
         return False
     page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
-    soup = BeautifulSoup(str(page), 'html.parser')  # this call takes a long time
+    soup = BeautifulSoup(str(page), 'html5lib')  # this call takes a long time
 
     block = soup.find('td', string="Up Time")
     block = block.next_sibling  # skip the header rows

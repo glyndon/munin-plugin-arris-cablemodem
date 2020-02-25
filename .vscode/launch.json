@@ -8,8 +8,8 @@
             "env": {
                 "MUNIN_CAP_DIRTYCONFIG": "1",
                 "MUNIN_PLUGSTATE": ".",
-                "MUNIN_STATEFILE": "./statefile",
-                "MODEM_STATUS_URL": "status8200.html"
+                "MUNIN_STATEFILE": "./statefile"
+                // "MODEM_STATUS_URL": "status.html"
             },
             "name": "Python: Current File",
             "type": "python",
