@@ -5,7 +5,7 @@ Currently supports certain versions of SB6183 and SB8200.
 
 To install:
 1) Be sure the speedtest-cli package is installed for your OS
-2) Use pip3 to install the 'bs4' Python package.
+2) Use pip3 to install the 'bs4' Python package, and 'html5lib' either with pip3 or your distro's pkg manager.
 3) Put the arris.py file in /usr/local/bin, make a symlink to it called 'wan' in your /etc/munin/plugins.
 4) Restart munin-node
 5) check your graphs in 5 minutes or so.
