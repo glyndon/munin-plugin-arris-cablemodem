@@ -56,7 +56,7 @@ def main(args):
     except KeyError:
         pass
 
-    try:
+    try:  # recent Munin will pass this var, indicating we can return values when asked for config info
         dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'  # has to exist and be '1'
     except KeyError:
         dirtyConfig = False
@@ -64,14 +64,14 @@ def main(args):
     if not getStatusIntoReport(MODEM_STATUS_URL):  # this call also sets report['model_name']
         return False
 
-    modem_uptime_url = ''
+    modem_uptime_url = ''  # this page's URL varies by modem model
     if 'SB6183' in report['model_name']:
         modem_uptime_url = 'http://192.168.100.1/RgSwInfo.asp'
     if 'SB8200' in report['model_name']:
         modem_uptime_url = 'http://192.168.100.1/cmswinfo.html'
 
     if 'http' in MODEM_STATUS_URL:
-        if not getModemUptime(modem_uptime_url):  # this page's URL varies by modem model
+        if not getModemUptime(modem_uptime_url):
             return False
         latencyValid = getNextHopLatency()
     else:  # we're testing using a file, skip this stuff

@@ -9,7 +9,7 @@
                 "MUNIN_CAP_DIRTYCONFIG": "1",
                 "MUNIN_PLUGSTATE": ".",
                 "MUNIN_STATEFILE": "./statefile"
-                // "MODEM_STATUS_URL": "status.html"
+                // ,"MODEM_STATUS_URL": "sb8200/status.html"
             },
             "name": "Python: Current File",
             "type": "python",
