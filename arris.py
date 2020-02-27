@@ -27,7 +27,7 @@ SPEEDTEST_JSON_FILE = 'speedtest.json'
 SPEEDTEST_MAX_AGE = 54
 SPEEDTEST_RETEST_DOWNLOAD = 25000000
 SPEEDTEST_RETEST_UPLOAD = 1000000
-MODEM_STATUS_URL = 'http://192.168.100.1/' # All Arris modems start here
+MODEM_STATUS_URL = 'http://192.168.100.1/'  # All Arris modems start here
 LATENCY_GATEWAY_HOST = '8.8.4.4'
 LATENCY_GATEWAY_CMD = "/usr/sbin/traceroute -n --sim-queries=1 --wait=1 --queries=1 --max-hops="
 LATENCY_GATEWAY_HOPS = 2
@@ -57,11 +57,13 @@ def main(args):
         pass
 
     try:  # recent Munin will pass this var, indicating we can return values when asked for config info
-        dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'  # has to exist and be '1'
+        # has to exist and be '1'
+        dirtyConfig = os.environ['MUNIN_CAP_DIRTYCONFIG'] == '1'
     except KeyError:
         dirtyConfig = False
 
-    if not getStatusIntoReport(MODEM_STATUS_URL):  # this call also sets report['model_name']
+    # this call also sets report['model_name']
+    if not getStatusIntoReport(MODEM_STATUS_URL):
         return False
 
     modem_uptime_url = ''  # this page's URL varies by modem model
@@ -103,7 +105,7 @@ def main(args):
         print(textwrap.dedent("""\
         distance.colour aaaaaa
         graph_info Graph of Internet Connection Speed @UTC {}""").format(testTime.strftime('%x %X')))
-    if (dirtyConfig or (not 'config' in args)) and  speedTestDataExist:
+    if (dirtyConfig or (not 'config' in args)) and speedTestDataExist:
         downloadspeed = float(report['speedtest']['download'] / 1000000)
         uploadspeed = float(report['speedtest']['upload'] / 1000000)
         # fiddle with the miles so the lines on the graph don't coincide/vary as much
@@ -273,7 +275,8 @@ def getStatusIntoReport(url):
         except (FileNotFoundError, OSError, PermissionError):
             print("# modem status-file read failure", file=sys.stderr)
             return False
-    page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
+    # drop some nasty characters
+    page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))
     soup = BeautifulSoup(str(page), 'html5lib')
 
     model_name_tag = soup.find(id='thisModelNumberIs')
@@ -370,7 +373,8 @@ def getModemUptime(url):
     except requests.exceptions.RequestException:
         print("# modem uptime page not responding", file=sys.stderr)
         return False
-    page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
+    # drop some nasty characters
+    page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))
     soup = BeautifulSoup(str(page), 'html5lib')  # this call takes a long time
 
     block = soup.find('td', string="Up Time")
@@ -379,7 +383,7 @@ def getModemUptime(url):
     uptimeText = block.get_text()
     uptimeElements = re.findall(r"\d+", uptimeText)
     uptime_seconds = \
-          int(uptimeElements[0]) * 86400 \
+        int(uptimeElements[0]) * 86400 \
         + int(uptimeElements[1]) * 3600 \
         + int(uptimeElements[2]) * 60 \
         + int(uptimeElements[3])
@@ -387,8 +391,9 @@ def getModemUptime(url):
     report['uptime_seconds'] = float(str(uptime_seconds)) / 86400.0
     return True
 
-
     # expected return is that report['gateway'] and report'next_hop_latency'] exist
+
+
 def getNextHopLatency():
     global report
     report['gateway'] = ''
@@ -412,7 +417,7 @@ def getNextHopLatency():
             break
     report['gateway'] = str(result)
     # issue the command to measure latency to that hop
-    cmd = LATENCY_MEASURE_CMD + report['gateway'] # + " 2>/dev/null"
+    cmd = LATENCY_MEASURE_CMD + report['gateway']  # + " 2>/dev/null"
     try:
         output = result = subprocess.run(cmd.split(' '), capture_output=True)
     except subprocess.CalledProcessError:
@@ -467,11 +472,12 @@ def checkSpeedtestData(args):
         minutes_elapsed = SPEEDTEST_MAX_AGE + 1
     # if it's too old, or recorded a slow test, generate a new one
     if minutes_elapsed > SPEEDTEST_MAX_AGE or \
-        ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD \
-         or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD) \
-         and minutes_elapsed > 9): # wait ~10 minutes to retest, so the graph can better show the hiccup
-        if not 'nospeedtest' in args: # for testing this code w/o running an actual speedtest
-            runSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)  # then reload our dictionary from the new file
+        ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD
+          or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD)
+         and minutes_elapsed > 9):  # wait ~10 minutes to retest, so the graph can better show the hiccup
+        if not 'nospeedtest' in args:  # for testing this code w/o running an actual speedtest
+            # then reload our dictionary from the new file
+            runSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)
         else:
             print('# would have run:', SPEEDTEST_CMD, file=sys.stderr)
         result = loadSpeedtestFileIntoReport(SPEEDTEST_JSON_FILE)
