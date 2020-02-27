@@ -263,15 +263,15 @@ def getStatusIntoReport(url):
         try:
             page = requests.get(url, timeout=25).text
         except requests.exceptions.RequestException:
-            print("modem status page not responding", file=sys.stderr)
+            print("# modem status page not responding", file=sys.stderr)
             return False
     else:
         try:
             fh = open(MODEM_STATUS_URL, 'r')
             page = fh.read()
             fh.close()
-        except:
-            print("modem status-file read failure", file=sys.stderr)
+        except (FileNotFoundError, OSError, PermissionError):
+            print("# modem status-file read failure", file=sys.stderr)
             return False
     page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
     soup = BeautifulSoup(str(page), 'html5lib')
@@ -368,7 +368,7 @@ def getModemUptime(url):
     try:
         page = requests.get(url, timeout=25).text
     except requests.exceptions.RequestException:
-        print("modem uptime page not responding", file=sys.stderr)
+        print("# modem uptime page not responding", file=sys.stderr)
         return False
     page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))  # drop some nasty characters
     soup = BeautifulSoup(str(page), 'html5lib')  # this call takes a long time
@@ -383,7 +383,7 @@ def getModemUptime(url):
         + int(uptimeElements[1]) * 3600 \
         + int(uptimeElements[2]) * 60 \
         + int(uptimeElements[3])
-    # report as days, so divide by seconds/day
+    # report as days, so divide by 86400 seconds/day
     report['uptime_seconds'] = float(str(uptime_seconds)) / 86400.0
     return True
 

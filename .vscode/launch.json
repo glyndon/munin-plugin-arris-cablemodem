@@ -10,6 +10,7 @@
                 "MUNIN_PLUGSTATE": ".",
                 "MUNIN_STATEFILE": "./statefile"
                 // ,"MODEM_STATUS_URL": "sb8200/status.html"
+                // ,"MODEM_STATUS_URL": "status.html"
             },
             "name": "Python: Current File",
             "type": "python",
