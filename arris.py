@@ -9,7 +9,10 @@
     and the
     Arris SB8200; tested on firmware SB8200.0200.174F.311915.NSH.RT.NA
 
-    TODO: (needed?) incorporate backoff logic for speedtest, so it doesn't run too much if the speed stays low
+    TODO: incorporate exponential backoff logic for speedtest, so it doesn't run too much if error or the speed stays low
+
+    TODO: instead of directly running speedtest, launch an 'at' job to run it in a couple minutes,
+            so it doesn't compete with munin's work
 """
 
 import datetime
@@ -474,24 +477,23 @@ def checkSpeedtestData(args):
     if minutes_elapsed > SPEEDTEST_MAX_AGE or \
         ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD
           or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD)
-         and minutes_elapsed > 9):  # wait ~10 minutes to retest, so the graph can better show the hiccup
+         and minutes_elapsed > 4):  # wait ~10 minutes to retest, so the graph can better show the hiccup
         if not 'nospeedtest' in args:  # for testing this code w/o running an actual speedtest
-            # then reload our dictionary from the new file
-            runSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)
+            # runSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)
+            queueSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)
         else:
             print('# would have run:', SPEEDTEST_CMD, file=sys.stderr)
-        result = loadSpeedtestFileIntoReport(SPEEDTEST_JSON_FILE)
     return result
 
 
-def runSpeedTest(output_json_file, speedtest_cmd):
+def queueSpeedTest(output_json_file, speedtest_cmd):
+    atCmd = 'echo "'+speedtest_cmd+' > ' + output_json_file + '" | at now + 1 minutes 2>/dev/null'
     try:
-        outFile = open(output_json_file, 'w')
-        result = subprocess.run(speedtest_cmd.split(' '), stdout=outFile)
-        outFile.close()
+        result = subprocess.run(atCmd, shell=True)
         return result.returncode == 0  # return a boolean
-    except (FileNotFoundError, OSError) as the_error:
-        print("# error creating:", output_json_file, the_error, file=sys.stderr)
+    except subprocess.CalledProcessError:
+        print("# error running", '"', atCmd, '"', the_error, file=sys.stderr)
+    return False
 
 
 if __name__ == '__main__':
