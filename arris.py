@@ -9,7 +9,8 @@
     and the
     Arris SB8200; tested on firmware SB8200.0200.174F.311915.NSH.RT.NA
 
-    TODO: incorporate exponential backoff logic for speedtest, so it doesn't run too much if error or the speed stays low
+    TODO: incorporate exponential backoff logic for speedtest, 
+        so it doesn't run too much if error or the speed stays low
 """
 
 import datetime
