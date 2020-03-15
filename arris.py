@@ -25,7 +25,7 @@ from bs4 import BeautifulSoup
 
 STATEFUL_FILE_DIR_DEFAULT = '.'
 SPEEDTEST_JSON_FILE = 'speedtest.json'
-SPEEDTEST_MAX_AGE = 54
+SPEEDTEST_MAX_AGE = 50
 SPEEDTEST_RETEST_DOWNLOAD = 25000000
 SPEEDTEST_RETEST_UPLOAD = 1000000
 MODEM_STATUS_URL = 'http://192.168.100.1/'  # All Arris modems start here
@@ -85,7 +85,6 @@ def main(args):
 
     # ==== report emission starts here ====
 
-    testTime = datetime.datetime.fromisoformat(report['speedtest']['timestamp'][:-1])
     print('\nmultigraph wan_speedtest')
     if 'config' in args:
         print(textwrap.dedent("""\
@@ -98,13 +97,17 @@ def main(args):
         down.colour 0066cc
         up.label Upload
         up.colour 44aa99
+        distance.colour aaaaaa
         distance.label Dist. to """).format(report['model_name']), end="")
         try:
             print(report['speedtest']['server']['sponsor'])
         except KeyError:
             print('server')
+        try:
+            testTime = datetime.datetime.fromisoformat(report['speedtest']['timestamp'][:-1])
+        except KeyError:
+            testTime = 'unknown'
         print(textwrap.dedent("""\
-        distance.colour aaaaaa
         graph_info Graph of Internet Connection Speed @UTC {}""").format(testTime.strftime('%x %X')))
     if (dirtyConfig or (not 'config' in args)) and speedTestDataExist:
         downloadspeed = float(report['speedtest']['download'] / 1000000)
