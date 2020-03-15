@@ -488,7 +488,7 @@ def checkSpeedtestData(args):
 
 
 def queueSpeedTest(output_json_file, speedtest_cmd):
-    atCmd = 'echo "'+speedtest_cmd+' > ' + output_json_file + '" | at now + 1 minutes 2>/dev/null'
+    atCmd = 'echo "'+speedtest_cmd+' > ' + output_json_file + '" | at now + 2 minutes 2>/dev/null'
     try:
         result = subprocess.run(atCmd, shell=True)
         return result.returncode == 0  # return a boolean
