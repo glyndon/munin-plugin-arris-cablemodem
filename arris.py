@@ -106,7 +106,7 @@ def main(args):
         try:
             testTime = datetime.datetime.fromisoformat(report['speedtest']['timestamp'][:-1])
         except KeyError:
-            testTime = 'unknown'
+            testTime = datetime.datetime.now()
         print(textwrap.dedent("""\
         graph_info Graph of Internet Connection Speed @UTC {}""").format(testTime.strftime('%x %X')))
     if (dirtyConfig or (not 'config' in args)) and speedTestDataExist:
