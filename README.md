@@ -8,11 +8,11 @@ To install:
 2) Install the 'bs4' Python package, either with pip3 or your distro's pkg manager.
 3) Put the arris.py file in /usr/local/bin, make a symlink to it called 'wan' in your /etc/munin/plugins directory.
 4) Add the following block to /etc/munin/plugin-conf.d/munin-node so the plugin has enough privileges.
-<code>
+`
     [wan]
     user munin
     group munin
-</code>
+`
 (this is supposed to appear as 3 lines, but I can't yet find how to control formatting here)
 
 5) Restart munin-node (sudo systemctl restart munin-node)
