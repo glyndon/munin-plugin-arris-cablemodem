@@ -474,16 +474,15 @@ def checkSpeedtestData(args):
         minutes_elapsed = (currentTime - priorTime) / datetime.timedelta(minutes=1)
     except KeyError:
         minutes_elapsed = SPEEDTEST_MAX_AGE + 1
-    # if it's too old, or recorded a slow test, generate a new one
+    # if it's too old, empty, or recorded a slow test, generate a new one
     if minutes_elapsed > SPEEDTEST_MAX_AGE or \
         ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD
           or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD)
-         and minutes_elapsed > 4):  # wait ~10 minutes to retest, so the graph can better show the hiccup
+          and minutes_elapsed > 4):  # wait ~10 minutes to retest, so the graph can better show the hiccup
         if not 'nospeedtest' in args:  # for testing this code w/o running an actual speedtest
-            # runSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)
             queueSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)
         else:
-            print('# would have run:', SPEEDTEST_CMD, file=sys.stderr)
+            print('# would have enqueued:', SPEEDTEST_CMD, file=sys.stderr)
     return result
 
 
