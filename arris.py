@@ -484,16 +484,16 @@ def checkSpeedtestData(args):
 
 
 def queueSpeedTest(output_json_file, speedtest_cmd, args):
-    # atCmd = 'echo "'+speedtest_cmd+' > ' + output_json_file + '" | at now + 2 minutes 2>/dev/null'
-    atCmd = 'nohup /bin/sh -c "sleep 120 ; '+speedtest_cmd+' > '+output_json_file+'" >/dev/null 2>&1 &'
+    # theCmd = 'echo "'+speedtest_cmd+' > ' + output_json_file + '" | at now + 2 minutes 2>/dev/null'
+    theCmd = 'nohup /bin/sh -c "sleep 120 ; '+speedtest_cmd+' > '+output_json_file+'" >/dev/null 2>&1 &'
     if not 'nospeedtest' in args:  # for testing this code w/o running an actual speedtest
         try:
-            result = subprocess.run(atCmd, shell=True)
+            result = subprocess.run(theCmd, shell=True)
             return result.returncode == 0  # return a boolean
         except subprocess.CalledProcessError:
-            print("# error running", '"', atCmd, '"', the_error, file=sys.stderr)
+            print("# error running", '"', theCmd, '"', the_error, file=sys.stderr)
     else:
-        print('# would have run:', atCmd, file=sys.stderr)
+        print('# would have run:', theCmd, file=sys.stderr)
     return False
 
 
