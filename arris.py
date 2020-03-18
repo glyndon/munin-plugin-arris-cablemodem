@@ -479,20 +479,21 @@ def checkSpeedtestData(args):
         ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD
           or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD)
           and minutes_elapsed > 4):  # wait ~10 minutes to retest, so the graph can better show the hiccup
-        if not 'nospeedtest' in args:  # for testing this code w/o running an actual speedtest
-            queueSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD)
-        else:
-            print('# would have enqueued:', SPEEDTEST_CMD, file=sys.stderr)
+        queueSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD, args)
     return result
 
 
-def queueSpeedTest(output_json_file, speedtest_cmd):
-    atCmd = 'echo "'+speedtest_cmd+' > ' + output_json_file + '" | at now + 2 minutes 2>/dev/null'
-    try:
-        result = subprocess.run(atCmd, shell=True)
-        return result.returncode == 0  # return a boolean
-    except subprocess.CalledProcessError:
-        print("# error running", '"', atCmd, '"', the_error, file=sys.stderr)
+def queueSpeedTest(output_json_file, speedtest_cmd, args):
+    # atCmd = 'echo "'+speedtest_cmd+' > ' + output_json_file + '" | at now + 2 minutes 2>/dev/null'
+    atCmd = 'nohup /bin/sh -c "sleep 120 ; '+speedtest_cmd+' > '+output_json_file+'" >/dev/null 2>&1 &'
+    if not 'nospeedtest' in args:  # for testing this code w/o running an actual speedtest
+        try:
+            result = subprocess.run(atCmd, shell=True)
+            return result.returncode == 0  # return a boolean
+        except subprocess.CalledProcessError:
+            print("# error running", '"', atCmd, '"', the_error, file=sys.stderr)
+    else:
+        print('# would have run:', atCmd, file=sys.stderr)
     return False
 
 
