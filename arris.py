@@ -35,18 +35,18 @@ LATENCY_GATEWAY_HOPS = 2
 LATENCY_MEASURE_CMD = "/bin/ping -W 3 -nqc 3 "
 report = {}
 SPEEDTEST_CMD = "/usr/bin/speedtest-cli --json"
-# ===== Inclusions ======
-# SPEEDTEST_CMD += "--server 14162"  # ND's server
-# SPEEDTEST_CMD += "--server 5025"  # ATT's Cicero, Il server
-# SPEEDTEST_CMD += "--server 5114"  # ATT's Detroit server
-# SPEEDTEST_CMD += "--server 5115"  # ATT's Indianapolis server
-# SPEEDTEST_CMD += "--server 1776"  # Comcast's Chicago server
+# ===== Force use of server(s) ======
+# SPEEDTEST_CMD += " --server 14162"  # ND's server
+# SPEEDTEST_CMD += " --server 5025"  # ATT's Cicero, Il server
+# SPEEDTEST_CMD += " --server 5114"  # ATT's Detroit server
+# SPEEDTEST_CMD += " --server 5115"  # ATT's Indianapolis server
+# SPEEDTEST_CMD += " --server 1776"  # Comcast's Chicago server
 # ===== Exclusions ======
-# SPEEDTEST_CMD += "--exclude 16770"  # Fourway.net server; its upload speed varies weirdly
-# SPEEDTEST_CMD += "--exclude 14162"  # ND's server
+SPEEDTEST_CMD += " --exclude 16770"  # Fourway.net server; its speed varies weirdly
+# SPEEDTEST_CMD += " --exclude 14162"  # ND's server
 # ===== Test modes ======
-# SPEEDTEST_CMD += "--no-download"  # for testing, reports download as 0
-# SPEEDTEST_CMD += "--version"  # for testing, does nothing
+# SPEEDTEST_CMD += " --no-download"  # for testing, reports download as 0
+# SPEEDTEST_CMD += " --version"  # for testing, does nothing
 
 
 def main(args):
@@ -110,13 +110,16 @@ def main(args):
         print(textwrap.dedent("""\
         graph_info Graph of Internet Connection Speed @UTC {}""").format(testTime.strftime('%x %X')))
     if (dirtyConfig or (not 'config' in args)) and speedTestDataExist:
-        downloadspeed = float(report['speedtest']['download'] / 1000000)
-        uploadspeed = float(report['speedtest']['upload'] / 1000000)
-        # fiddle with the miles so the lines on the graph don't coincide/vary as much
-        distance = math.log(max(1, float(report['speedtest']['server']['d']) - 3)) + 10
-        print('down.value', downloadspeed)
-        print('up.value', uploadspeed)
-        print('distance.value', distance)
+        try:
+            downloadspeed = float(report['speedtest']['download'] / 1000000)
+            uploadspeed = float(report['speedtest']['upload'] / 1000000)
+            # fiddle with the miles so the lines on the graph don't coincide/vary as much
+            distance = math.log(max(1, float(report['speedtest']['server']['d']) - 3)) + 10
+            print('down.value', downloadspeed)
+            print('up.value', uploadspeed)
+            print('distance.value', distance)
+        except KeyError:
+            pass
 
     print('\nmultigraph wan_ping')
     if 'config' in args:
@@ -265,6 +268,7 @@ def main(args):
 def getStatusIntoReport(url):
     global report
 
+    # handle URLs that are web addresses, or local HTML file references for testing
     if 'http' in MODEM_STATUS_URL:
         try:
             page = requests.get(url, timeout=25).text
@@ -279,6 +283,7 @@ def getStatusIntoReport(url):
         except (FileNotFoundError, OSError, PermissionError):
             print("# modem status-file read failure", file=sys.stderr)
             return False
+
     # drop some nasty characters
     page = page.translate(str.maketrans('', '', "\n\x00\x09\r"))
     soup = BeautifulSoup(str(page), 'html5lib')
@@ -307,7 +312,7 @@ def getStatusIntoReport(url):
         downsnr_col = 6
         corrected_col = 7
         uncorrectable_col = 8
-    if 'SB8200' in report['model_name']:
+    elif 'SB8200' in report['model_name']:
         channel_id_col = 0
         downfreq_col = 3
         upfreq_col = 4
@@ -316,6 +321,9 @@ def getStatusIntoReport(url):
         downsnr_col = 5
         corrected_col = 6
         uncorrectable_col = 7
+    else:
+        # we don't know this modem's column numbers
+        return False
 
     # setup empty dict's for the incoming data rows
     report['downsnr'] = {}
@@ -446,19 +454,6 @@ def getNextHopLatency():
     return True
 
 
-def loadSpeedtestFileIntoReport(aFile):
-    global report
-    report['speedtest'] = {}
-    try:
-        fhInput = open(aFile, 'r')
-        report['speedtest'].update(json.load(fhInput))
-        fhInput.close()
-        return True
-    except (FileNotFoundError, OSError, PermissionError, json.decoder.JSONDecodeError) as the_error:
-        print("# error reading", aFile, the_error, file=sys.stderr)
-        return False
-
-
 def checkSpeedtestData(args):
     global SPEEDTEST_JSON_FILE
 
@@ -481,6 +476,19 @@ def checkSpeedtestData(args):
           and minutes_elapsed > 4):  # wait ~10 minutes to retest, so the graph can better show the hiccup
         queueSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD, args)
     return result
+
+
+def loadSpeedtestFileIntoReport(aFile):
+    global report
+    report['speedtest'] = {}
+    try:
+        fhInput = open(aFile, 'r')
+        report['speedtest'].update(json.load(fhInput))
+        fhInput.close()
+        return True
+    except (FileNotFoundError, OSError, PermissionError, json.decoder.JSONDecodeError) as the_error:
+        print("# error reading", aFile, the_error, file=sys.stderr)
+        return False
 
 
 def queueSpeedTest(output_json_file, speedtest_cmd, args):
