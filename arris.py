@@ -89,14 +89,16 @@ def main(args):
     if 'config' in args:
         print(textwrap.dedent("""\
         graph_title {} [01]: Speedtest
-        graph_vlabel Megabits/Second
+        graph_vlabel (see legend)
         graph_category x-wan
         graph_args --lower-limit 0
         graph_scale no
-        down.label Download
+        down.label Download (Mb/S)
         down.colour 0066cc
-        up.label Upload
+        up.label Upload (Mb/S)
         up.colour 44aa99
+        ping.colour cc2900
+        ping.label Ping (ms)
         distance.colour aaaaaa
         distance.label Dist. to """).format(report['model_name']), end="")
         try:
@@ -118,6 +120,7 @@ def main(args):
             print('down.value', downloadspeed)
             print('up.value', uploadspeed)
             print('distance.value', distance)
+            print('ping.value', float(report['speedtest']['ping']))
         except KeyError:
             pass
 
