@@ -496,7 +496,7 @@ def loadSpeedtestFileIntoReport(aFile):
 
 def queueSpeedTest(output_json_file, speedtest_cmd, args):
     # theCmd = 'echo "'+speedtest_cmd+' > ' + output_json_file + '" | at now + 2 minutes 2>/dev/null'
-    theCmd = 'nohup /bin/sh -c "sleep 120 ; '+speedtest_cmd+' > '+output_json_file+'" >/dev/null 2>&1 &'
+    theCmd = 'nohup /bin/sh -c "sleep 75 ; '+speedtest_cmd+' > '+output_json_file+'" >/dev/null 2>&1 &'
     if not 'nospeedtest' in args:  # for testing this code w/o running an actual speedtest
         try:
             result = subprocess.run(theCmd, shell=True)
