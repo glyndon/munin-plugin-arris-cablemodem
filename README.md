@@ -4,7 +4,7 @@ Currently supports certain versions of SB6183 and SB8200.
 (If you have another model, see below.)
 
 To install:
-1) Be sure the 'speedtest-cli'  and 'at' packages are installed for your OS
+1) Be sure the 'speedtest-cli' package is installed for your OS
 2) Install the 'bs4' Python package, either with pip3 or your distro's pkg manager.
 3) Put the arris.py file in `/usr/local/bin`, make a symlink to it called `wan` in your `/etc/munin/plugins` directory.
 4) Add the following block to `/etc/munin/plugin-conf.d/munin-node` so the plugin has enough privileges.
