@@ -6,11 +6,12 @@
     "configurations": [
         {   "args": ["config", "nospeedtest"],
             "env": {
+                // "MODEM_STATUS_URL": "http://127.0.0.1/",
+                // "MODEM_STATUS_URL": "sb8200/status.html",
+                // "MODEM_STATUS_URL": "status.html",
                 "MUNIN_CAP_DIRTYCONFIG": "1",
                 "MUNIN_PLUGSTATE": ".",
                 "MUNIN_STATEFILE": "./statefile"
-                // ,"MODEM_STATUS_URL": "sb8200/status.html"
-                // ,"MODEM_STATUS_URL": "status.html"
             },
             "name": "Python: Current File",
             "type": "python",
