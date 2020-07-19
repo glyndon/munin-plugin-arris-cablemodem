@@ -131,6 +131,7 @@ def main(args):
         graph_vlabel millliSeconds
         graph_category x-wan
         graph_args --alt-autoscale --upper-limit 33 --lower-limit 0 --rigid --allow-shrink
+        graph_scale no
         latency.colour cc2900
         latency.label Latency for """).format(report['model_name']), end="")
         print(LATENCY_GATEWAY_HOPS, "hops")
@@ -144,6 +145,7 @@ def main(args):
         graph_title {} [03]: Downstream Power
         graph_vlabel dB
         graph_category x-wan
+        graph_scale no
         graph_args --alt-autoscale --lower-limit 4""").format(report['model_name']))
         for chan in report['downpower']:
             print('down-power-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
@@ -157,6 +159,7 @@ def main(args):
         graph_title {} [04]: Downstream SNR
         graph_vlabel dB
         graph_category x-wan
+        graph_scale no
         graph_args --alt-autoscale --lower-limit 38
         """).format(report['model_name']), end='')
         for chan in report['downsnr']:
@@ -171,6 +174,7 @@ def main(args):
         graph_title {} [07]: Upstream Power
         graph_vlabel dB
         graph_category x-wan
+        graph_scale no
         graph_args --alt-autoscale --lower-limit 40 --upper-limit 48
         """).format(report['model_name']), end='')
         for chan in report['uppower']:
