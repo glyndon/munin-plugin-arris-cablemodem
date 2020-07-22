@@ -168,42 +168,28 @@ def main(args):
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.value', report['downsnr'][chan])
 
-    print('\nmultigraph wan_uppower')
+    print('\nmultigraph wan_frequencies')
     if 'config' in args:
         print(textwrap.dedent("""\
-        graph_title {} [07]: Upstream Power
-        graph_vlabel dB
+        graph_title {} [05]: Frequency Assignments
+        graph_vlabel MHz
         graph_category x-wan
-        graph_scale no
-        graph_args --alt-autoscale --lower-limit 40 --upper-limit 48
+        graph_args --alt-autoscale
         """).format(report['model_name']), end='')
-        for chan in report['uppower']:
-            print('up-power-ch' + chan + '.label', 'ch' + report['upchan_id'][chan])
+        for chan in report['downfreq']:
+            print('downfreq-ch' + chan + '.label', 'dn-ch' + report['downchan_id'][chan])
+        for chan in report['upfreq']:
+            print('upfreq-ch' + chan + '.label', 'up-ch' + report['upchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
-        for chan in report['uppower']:
-            print('up-power-ch' + chan + '.value', report['uppower'][chan])
-
-    print('\nmultigraph wan_spread')
-    if 'config' in args:
-        print(textwrap.dedent("""\
-        graph_title {} [08]: Signal Quality Spread
-        graph_vlabel dB
-        graph_category x-wan
-        graph_args --alt-autoscale --lower-limit 0 --upper-limit 3
-        graph_scale no
-        downpowerspread.label Downstream Power spread
-        downsnrspread.label Downstream SNR spread
-        uppowerspread.label Upstream Power spread
-        """).format(report['model_name']), end='')
-    if dirtyConfig or (not 'config' in args):
-        print('downpowerspread.value', report['downpowerspread'])
-        print('downsnrspread.value', report['downsnrspread'])
-        print('uppowerspread.value', report['uppowerspread'])
+        for chan in report['downfreq']:
+            print('downfreq-ch' + chan + '.value', float(report['downfreq'][chan]) / 1000000)
+        for chan in report['upfreq']:
+            print('upfreq-ch' + chan + '.value', float(report['upfreq'][chan]) / 1000000)
 
     print('\nmultigraph wan_error_corr')
     if 'config' in args:
         print(textwrap.dedent("""\
-        graph_title {} [05]: Downstream Corrected
+        graph_title {} [06]: Downstream Corrected
         graph_vlabel Blocks per Minute
         graph_category x-wan
         graph_args --upper-limit 33 --rigid
@@ -221,7 +207,7 @@ def main(args):
     print('\nmultigraph wan_error_uncorr')
     if 'config' in args:
         print(textwrap.dedent("""\
-        graph_title {} [06]: Downstream Uncorrectable
+        graph_title {} [07]: Downstream Uncorrectable
         graph_vlabel Blocks per Minute
         graph_category x-wan
         graph_args --upper-limit 33 --rigid
@@ -236,23 +222,37 @@ def main(args):
         for chan in report['uncorrectable_total']:
             print('uncorrected-total-ch' + chan + '.value', report['uncorrectable_total'][chan])
 
-    print('\nmultigraph wan_frequencies')
+    print('\nmultigraph wan_uppower')
     if 'config' in args:
         print(textwrap.dedent("""\
-        graph_title {} [09]: Frequency Assignments
-        graph_vlabel MHz
+        graph_title {} [08]: Upstream Power
+        graph_vlabel dB
         graph_category x-wan
-        graph_args --alt-autoscale
+        graph_scale no
+        graph_args --alt-autoscale --lower-limit 40 --upper-limit 48
         """).format(report['model_name']), end='')
-        for chan in report['downfreq']:
-            print('downfreq-ch' + chan + '.label', 'dn-ch' + report['downchan_id'][chan])
-        for chan in report['upfreq']:
-            print('upfreq-ch' + chan + '.label', 'up-ch' + report['upchan_id'][chan])
+        for chan in report['uppower']:
+            print('up-power-ch' + chan + '.label', 'ch' + report['upchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
-        for chan in report['downfreq']:
-            print('downfreq-ch' + chan + '.value', float(report['downfreq'][chan]) / 1000000)
-        for chan in report['upfreq']:
-            print('upfreq-ch' + chan + '.value', float(report['upfreq'][chan]) / 1000000)
+        for chan in report['uppower']:
+            print('up-power-ch' + chan + '.value', report['uppower'][chan])
+
+    print('\nmultigraph wan_spread')
+    if 'config' in args:
+        print(textwrap.dedent("""\
+        graph_title {} [09]: Signal Quality Spread
+        graph_vlabel dB
+        graph_category x-wan
+        graph_args --alt-autoscale --lower-limit 0 --upper-limit 3
+        graph_scale no
+        downpowerspread.label Downstream Power spread
+        downsnrspread.label Downstream SNR spread
+        uppowerspread.label Upstream Power spread
+        """).format(report['model_name']), end='')
+    if dirtyConfig or (not 'config' in args):
+        print('downpowerspread.value', report['downpowerspread'])
+        print('downsnrspread.value', report['downsnrspread'])
+        print('uppowerspread.value', report['uppowerspread'])
 
     print('\nmultigraph wan_uptime')
     if 'config' in args:
