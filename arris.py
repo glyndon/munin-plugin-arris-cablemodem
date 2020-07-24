@@ -11,6 +11,8 @@
 
     TODO: incorporate exponential backoff logic for speedtest, 
         so it doesn't run too much if error or the speed stays low
+    TODO: save model number in state file, or just use a literal default,
+        so we report at least the config when modem is offline
 """
 
 import datetime
@@ -65,21 +67,24 @@ def main(args):
 
     # this call also sets report['model_name']
     if not getStatusIntoReport(MODEM_STATUS_URL):
-        return False
-
-    modem_uptime_url = ''  # this page's URL varies by modem model
-    if 'SB6183' in report['model_name']:
-        modem_uptime_url = 'http://192.168.100.1/RgSwInfo.asp'
-    if 'SB8200' in report['model_name']:
-        modem_uptime_url = 'http://192.168.100.1/cmswinfo.html'
-
-    if 'http' in MODEM_STATUS_URL:
-        if not getModemUptime(modem_uptime_url):
-            return False
-        latencyValid = getNextHopLatency()
-    else:  # we're testing using a file, skip this stuff
+        # return False
+        report['model_name'] = 'modem_offline'
         latencyValid = False
         report['uptime_seconds'] = 0
+    else:
+        modem_uptime_url = ''  # this page's URL varies by modem model
+        if 'SB6183' in report['model_name']:
+            modem_uptime_url = 'http://192.168.100.1/RgSwInfo.asp'
+        if 'SB8200' in report['model_name']:
+            modem_uptime_url = 'http://192.168.100.1/cmswinfo.html'
+
+        if 'http' in MODEM_STATUS_URL:
+            if not getModemUptime(modem_uptime_url):
+                return False
+            latencyValid = getNextHopLatency()
+        else:  # we're testing using a file, skip this stuff
+            latencyValid = False
+            report['uptime_seconds'] = 0
 
     speedTestDataExist = checkSpeedtestData(args)
 
@@ -222,6 +227,34 @@ def main(args):
         for chan in report['uncorrectable_total']:
             print('uncorrected-total-ch' + chan + '.value', report['uncorrectable_total'][chan])
 
+    # print('\nmultigraph wan_errors')
+    # if 'config' in args:
+    #     print(textwrap.dedent("""\
+    #     graph_title {} [06]: Downstream Corrected/Uncorrectable
+    #     graph_vlabel Blocks per Minute
+    #     graph_category x-wan
+    #     graph_period minute
+    #     graph_args --upper-limit 33 --lower-limit 33 --rigid
+    #     graph_scale no
+    #     """).format(report['model_name']), end='')
+    #     for chan in report['uncorrectable_total']:
+    #         # print('uncorrected-total-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
+    # #        print('uncorrected-total-ch' + chan + '.type', 'DERIVE')
+    #         # print('uncorrected-total-ch' + chan + '.min', '0')
+    #         print('uncorrected-total-ch' + chan + '.graph', 'no')
+    # if dirtyConfig or (not 'config' in args):
+    #     for chan in report['uncorrectable_total']:
+    #         print('uncorrected-total-ch' + chan + '.value', report['uncorrectable_total'][chan])
+    # if 'config' in args:
+    #     for chan in report['corrected_total']:
+    #         print('corrected-total-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
+    # #        print('corrected-total-ch' + chan + '.type', 'DERIVE')
+    #         # print('corrected-total-ch' + chan + '.min', '0')
+    #         print('corrected-total-ch' + chan + '.negative', 'uncorrected-total-ch' + chan)
+    # if dirtyConfig or (not 'config' in args):
+    #     for chan in report['corrected_total']:
+    #         print('corrected-total-ch' + chan + '.value', report['corrected_total'][chan])
+
     print('\nmultigraph wan_uppower')
     if 'config' in args:
         print(textwrap.dedent("""\
@@ -275,10 +308,24 @@ def main(args):
 def getStatusIntoReport(url):
     global report
 
+    # setup empty dict's for the incoming data rows; do it here so these exist if this function fails to reach the modem
+    report['downsnr'] = {}
+    report['downpower'] = {}
+    report['uppower'] = {}
+    report['corrected_total'] = {}
+    report['uncorrectable_total'] = {}
+    report['downchan_id'] = {}
+    report['upchan_id'] = {}
+    report['downfreq'] = {}
+    report['upfreq'] = {}
+    report['uppowerspread'] = 0
+    report['downpowerspread'] = 0
+    report['downsnrspread'] = 0
+
     # handle URLs that are web addresses, or local HTML file references for testing
     if 'http' in MODEM_STATUS_URL:
         try:
-            page = requests.get(url, timeout=25).text
+            page = requests.get(url, timeout=10).text
         except requests.exceptions.RequestException:
             print("# modem status page not responding", file=sys.stderr)
             return False
@@ -331,17 +378,6 @@ def getStatusIntoReport(url):
     else:
         # we don't know this modem's column numbers
         return False
-
-    # setup empty dict's for the incoming data rows
-    report['downsnr'] = {}
-    report['downpower'] = {}
-    report['uppower'] = {}
-    report['corrected_total'] = {}
-    report['uncorrectable_total'] = {}
-    report['downchan_id'] = {}
-    report['upchan_id'] = {}
-    report['downfreq'] = {}
-    report['upfreq'] = {}
 
     # Gather the various data items from the tables...
     block = soup.find('th', string="Downstream Bonded Channels").parent
