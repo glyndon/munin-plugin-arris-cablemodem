@@ -44,7 +44,7 @@ SPEEDTEST_CMD = "/usr/bin/speedtest-cli --json"
 # SPEEDTEST_CMD += " --server 5115"  # ATT's Indianapolis server
 # SPEEDTEST_CMD += " --server 1776"  # Comcast's Chicago server
 # ===== Exclusions ======
-SPEEDTEST_CMD += " --exclude 16770"  # Fourway.net server; its speed varies weirdly
+# SPEEDTEST_CMD += " --exclude 16770"  # Fourway.net server; its speed varies weirdly
 # SPEEDTEST_CMD += " --exclude 14162"  # ND's server
 # ===== Test modes ======
 # SPEEDTEST_CMD += " --no-download"  # for testing, reports download as 0
@@ -151,7 +151,8 @@ def main(args):
         graph_vlabel dB
         graph_category x-wan
         graph_scale no
-        graph_args --alt-autoscale --lower-limit 4""").format(report['model_name']))
+        graph_args --alt-autoscale --lower-limit -15 --upper-limit 15
+	    """).format(report['model_name']))
         for chan in report['downpower']:
             print('down-power-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
     if dirtyConfig or (not 'config' in args):
@@ -165,7 +166,7 @@ def main(args):
         graph_vlabel dB
         graph_category x-wan
         graph_scale no
-        graph_args --alt-autoscale --lower-limit 38
+        graph_args --alt-autoscale --lower-limit 33
         """).format(report['model_name']), end='')
         for chan in report['downsnr']:
             print('down-snr-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
@@ -262,7 +263,7 @@ def main(args):
         graph_vlabel dB
         graph_category x-wan
         graph_scale no
-        graph_args --alt-autoscale --lower-limit 40 --upper-limit 48
+        graph_args --alt-autoscale --lower-limit 45 --upper-limit 51
         """).format(report['model_name']), end='')
         for chan in report['uppower']:
             print('up-power-ch' + chan + '.label', 'ch' + report['upchan_id'][chan])
