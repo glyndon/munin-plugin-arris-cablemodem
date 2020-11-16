@@ -12,7 +12,9 @@
     TODO: incorporate exponential backoff logic for speedtest, 
         so it doesn't run too much if error or the speed stays low
     TODO: save model number in state file, or just use a literal default,
-        so we report at least the config when modem is offline
+        so we report at least the config when modem is offline.
+    TODO: make retest test logic compute whether it's time to run based on our percentage
+        of departure from the baseline speed (a literal, else we have to store a running avg).
 """
 
 import datetime
@@ -27,7 +29,7 @@ from bs4 import BeautifulSoup
 
 STATEFUL_FILE_DIR_DEFAULT = '.'
 SPEEDTEST_JSON_FILE = 'speedtest.json'
-SPEEDTEST_MAX_AGE = 110
+SPEEDTEST_MAX_AGE = 55
 SPEEDTEST_RETEST_DOWNLOAD = 25000000
 SPEEDTEST_RETEST_UPLOAD = 1000000
 MODEM_STATUS_URL = 'http://192.168.100.1/'  # All Arris modems start here
@@ -514,10 +516,12 @@ def checkSpeedtestData(args):
     except KeyError:
         minutes_elapsed = SPEEDTEST_MAX_AGE + 1
     # if it's too old, empty, or recorded a slow test, generate a new one
+    # TODO try logic here that retests sooner based on percentage below ideal speed
     if minutes_elapsed > SPEEDTEST_MAX_AGE or \
         ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD
           or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD)
           and minutes_elapsed > 4):  # wait ~10 minutes to retest, so the graph can better show the hiccup
+        # minutes_elapsed > ((float(report['speedtest']['download']) / SPEEDTEST_IDEAL_DOWNLOAD * SPEEDTEST_MAX_AGE) \
         queueSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD, args)
     return result
 
