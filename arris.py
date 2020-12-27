@@ -105,11 +105,11 @@ def main(args):
         up.label Upload (Mb/s)
         up.colour 44aa99
         distance.colour d19797
-        distance.label Dist. to """).format(report['model_name']), end="")
+        distance.label 'Distance' ( """).format(report['model_name']), end="")
         try:
-            print(report['speedtest']['server']['sponsor'])
+            print(report['speedtest']['server']['sponsor'], ')')
         except KeyError:
-            print('server')
+            print('server)')
         try:
             testTime = datetime.datetime.fromisoformat(report['speedtest']['timestamp'][:-1])
         except KeyError:
@@ -206,7 +206,7 @@ def main(args):
         """).format(report['model_name']), end='')
         for chan in report['corrected_total']:
             print('corrected-total-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
-            print('corrected-total-ch' + chan + '.type', 'DERIVE')
+            print('corrected-total-ch' + chan + '.type', 'COUNTER')
             print('corrected-total-ch' + chan + '.min', '0')
     if dirtyConfig or (not 'config' in args):
         for chan in report['corrected_total']:
@@ -224,7 +224,7 @@ def main(args):
         """).format(report['model_name']), end='')
         for chan in report['uncorrectable_total']:
             print('uncorrected-total-ch' + chan + '.label', 'ch' + report['downchan_id'][chan])
-            print('uncorrected-total-ch' + chan + '.type', 'DERIVE')
+            print('uncorrected-total-ch' + chan + '.type', 'COUNTER')
             print('uncorrected-total-ch' + chan + '.min', '0')
     if dirtyConfig or (not 'config' in args):
         for chan in report['uncorrectable_total']:
@@ -520,7 +520,7 @@ def checkSpeedtestData(args):
     if minutes_elapsed > SPEEDTEST_MAX_AGE or \
         ((float(report['speedtest']['download']) < SPEEDTEST_RETEST_DOWNLOAD
           or float(report['speedtest']['upload']) < SPEEDTEST_RETEST_UPLOAD)
-          and minutes_elapsed > 4):  # wait ~10 minutes to retest, so the graph can better show the hiccup
+          and minutes_elapsed > 9):  # wait ~10 minutes to retest, so the graph can better show the hiccup
         # minutes_elapsed > ((float(report['speedtest']['download']) / SPEEDTEST_IDEAL_DOWNLOAD * SPEEDTEST_MAX_AGE) \
         queueSpeedTest(SPEEDTEST_JSON_FILE, SPEEDTEST_CMD, args)
     return result
